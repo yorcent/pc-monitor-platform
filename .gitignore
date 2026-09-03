@@ -15,3 +15,4 @@ _inline.js
 # PyInstaller 构建产物
 build/
 dist/
+*.spec
