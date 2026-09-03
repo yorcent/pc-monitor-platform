@@ -1309,7 +1309,7 @@ setInterval(clock,1000); clock();
 /* ================= 停止服务 ================= */
 let stopping=false;
 async function stopServer(){
-  const ok=await confirmAction('结束运行本系统','确定要停止本性能监测平台吗？<br>停止后数据将不再刷新，你可以关闭此页面。<br>如需再次使用，双击 <b>电脑管家启动.bat</b> 启动。','停止服务');
+  const ok=await confirmAction('结束运行本系统','确定要停止本性能监测平台吗？<br>停止后数据将不再刷新，你可以关闭此页面。<br>如需再次使用，双击 <b>PC-Monitor.exe</b>（或 <b>电脑管家启动.bat</b>）启动。','停止服务');
   if(!ok) return;
   try{ await api('/api/shutdown',{method:'POST'}); }catch(e){}
   stopping=true;
@@ -1317,7 +1317,7 @@ async function stopServer(){
     <div style="font-size:44px">⏻</div>
     <h2 style="color:var(--green)">服务已停止</h2>
     <p style="color:var(--muted)">性能监测平台已结束运行，现在可以安全关闭本页面。</p>
-    <p style="color:var(--dim);font-size:12px">再次使用：双击 pc-monitor-platform 目录下的 电脑管家启动.bat</p>
+    <p style="color:var(--dim);font-size:12px">再次使用：双击 PC-Monitor.exe（或 电脑管家启动.bat）重新启动</p>
   </div>`;
 }
 </script>

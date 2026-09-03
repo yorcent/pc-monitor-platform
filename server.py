@@ -37,6 +37,18 @@ HOST = "127.0.0.1"
 PORT = 8765
 _httpd = None  # 供 shutdown 使用
 MY_PID = os.getpid()
+_tray_icon = None  # 托盘图标引用（防止被 GC）
+
+
+def _port_in_use(host, port):
+    """探测端口是否已被占用（Windows 下 allow_reuse_address 允许重复 bind，
+    必须显式探测，否则"再次双击"会重复启动一个监听同端口的新实例）"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            return s.connect_ex((host, port)) == 0
+    except Exception:
+        return False
 
 # ---------------- 全局状态 ----------------
 _now = time.time()
@@ -1846,18 +1858,71 @@ def human_bytes(n):
     return "%.1f PB" % n
 
 
+def _start_tray():
+    """exe 打包环境：右下角系统托盘图标，随时可见/打开页面/退出程序。
+    源码(非打包)模式不启用托盘，避免干扰开发。"""
+    global _tray_icon
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        import pystray
+        from PIL import Image
+
+        def _open_page():
+            try:
+                webbrowser.open("http://%s:%d" % (HOST, PORT))
+            except Exception:
+                pass
+
+        def _quit():
+            try:
+                with open(os.path.join(BASE_DIR, ".stop_flag"), "w") as f:
+                    f.write("stop")
+            except Exception:
+                pass
+            try:
+                _httpd.shutdown()
+            except Exception:
+                pass
+
+        ic = os.path.join(BASE_DIR, "icon.ico")
+        if not os.path.isfile(ic):
+            ic = os.path.join(getattr(sys, "_MEIPASS", BASE_DIR), "icon.ico")
+        image = Image.open(ic)
+        menu = pystray.Menu(
+            pystray.MenuItem("打开监测页面", lambda i, it: _open_page(), default=True),
+            pystray.MenuItem("退出程序", lambda i, it: _quit()),
+        )
+        _tray_icon = pystray.Icon("PC-Monitor", image, "PC 性能监测与优化平台", menu)
+        threading.Thread(target=_tray_icon.run, daemon=True).start()
+        print("托盘图标已启动")
+    except Exception:
+        _tray_icon = None
+
+
 def main():
-    global _httpd
+    global _httpd, _tray_icon
+    # 显式探测端口占用（Windows 下 allow_reuse_address 允许重复 bind，必须主动探测，
+    # 否则"再次双击"会重复启动新实例）。已有服务在运行时：直接打开页面并退出本进程。
+    if _port_in_use(HOST, PORT):
+        print("端口 %d 已有服务在运行，直接打开已有服务页面 …" % PORT)
+        if "--restarted" not in sys.argv:
+            try:
+                webbrowser.open("http://%s:%d" % (HOST, PORT))
+            except Exception:
+                pass
+        return 0
     try:
         _httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as e:
-        print("端口 %d 被占用: %s" % (PORT, e))
-        sys.exit(1)
+        print("端口 %d 绑定失败: %s" % (PORT, e))
+        return 1
     print("=" * 52)
     print(" PC 性能监测与优化平台 v2 已启动")
     print(" 访问地址: http://%s:%d" % (HOST, PORT))
-    print(" 按 Ctrl+C 停止服务；页面左下角也可点“停止服务”")
+    print(" 按 Ctrl+C 停止服务；页面左下角也可点“结束运行本系统”")
     print("=" * 52)
+    _start_tray()
     if "--restarted" not in sys.argv:
         threading.Timer(1.2, lambda: webbrowser.open("http://%s:%d" % (HOST, PORT))).start()
     try:
@@ -1865,6 +1930,7 @@ def main():
     except KeyboardInterrupt:
         print("\n已停止")
         _httpd.shutdown()
+    return 0
 
 
 if __name__ == "__main__":
