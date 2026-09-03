@@ -64,8 +64,11 @@ def _fmt(n):
 
 def _run(cmd, timeout=10):
     """运行子进程并自适应解码输出（中文系统 cmd 输出为 GBK）"""
+    # CREATE_NO_WINDOW：exe(--noconsole) 环境无控制台，必须禁止子进程新建终端窗口，
+    # 否则 powershell/cmd/nvidia-smi 等控制台子进程会反复弹窗。
+    _nowin = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
     try:
-        p = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout, creationflags=_nowin)
     except subprocess.TimeoutExpired:
         return "", 1
     except Exception:
@@ -1667,7 +1670,9 @@ def open_target(key="", path=""):
         try:
             if os.path.isfile(path):
                 # explorer /select 定位文件所在目录并高亮；用字符串形式避免 subprocess 引号干扰
-                subprocess.Popen('explorer /select,"%s"' % path)
+                # CREATE_NO_WINDOW：exe 无控制台环境避免 explorer 弹终端窗口
+                _nowin = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+                subprocess.Popen('explorer /select,"%s"' % path, creationflags=_nowin)
                 _log("open-file OK: %s" % path)
             else:
                 # os.startfile = ShellExecute，Windows 原生最可靠打开目录
