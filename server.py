@@ -947,7 +947,7 @@ def network_diag():
     return {"gateway": gateway, "results": results, "ts": time.strftime("%H:%M:%S")}
 
 
-def speed_test():
+def _download_speed_test():
     # 测速源优先国内可达镜像（中科大/清华对脚本 UA 返回 403，已实测排除）
     urls = [("华为云镜像", "https://mirrors.huaweicloud.com/ubuntu/ls-lR.gz"),
             ("阿里云镜像", "https://mirrors.aliyun.com/ubuntu/ls-lR.gz"),
@@ -972,7 +972,168 @@ def speed_test():
                     "mbps": round(mbps, 2), "mbs": round(total / 1e6 / dur, 2)}
         except Exception as e:
             last_err = str(e)
-    return {"ok": False, "msg": "测速失败: " + last_err}
+    return {"ok": False, "msg": "下载测速失败: " + last_err}
+
+
+def upload_speed_test():
+    """上传测速：POST 数据到 Cloudflare 上传端点（业界标准测速方式）。
+    Cloudflare 跨境线路可能不稳定，重试 3 次提高成功率。"""
+    payload = os.urandom(8 * 1024 * 1024)  # 8MB
+    last_err = "未知错误"
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request("https://speed.cloudflare.com/__up", data=payload,
+                                         headers={"User-Agent": "Mozilla/5.0",
+                                                  "Content-Type": "application/octet-stream"},
+                                         method="POST")
+            start = time.time()
+            with urllib.request.urlopen(req, timeout=45) as r:
+                r.read()
+            dur = time.time() - start
+            mbps = len(payload) * 8 / 1e6 / dur
+            return {"ok": True, "source": "Cloudflare", "bytes": len(payload),
+                    "duration": round(dur, 2), "mbps": round(mbps, 2), "mbs": round(len(payload) / 1e6 / dur, 2)}
+        except Exception as e:
+            last_err = str(e)
+            if attempt < 2:
+                time.sleep(1)
+    return {"ok": False, "msg": "上传测速失败: %s（已重试3次）" % last_err}
+
+
+def speed_test():
+    """下载 + 上传测速（一次返回两个结果）"""
+    down = _download_speed_test()
+    up = upload_speed_test()
+    return {"ok": down.get("ok", False) or up.get("ok", False), "download": down, "upload": up}
+
+
+def _nic_errors():
+    """网卡错误/丢弃包统计"""
+    try:
+        out, _ = _run(["netstat", "-e"], timeout=10)
+        errors = discards = None
+        for line in out.splitlines():
+            low = line.lower()
+            if "errors" in low or "错误" in line:
+                nums = [int(p) for p in line.split() if p.isdigit()]
+                if nums:
+                    errors = sum(nums)
+            elif "discards" in low or "丢弃" in line:
+                nums = [int(p) for p in line.split() if p.isdigit()]
+                if nums:
+                    discards = sum(nums)
+        return {"errors": errors, "discards": discards}
+    except Exception:
+        return {"errors": None, "discards": None}
+
+
+def network_health():
+    """一键网络状态检测：综合诊断 + 详细卡顿原因 + 对应修复动作"""
+    gateway = get_gateway()
+    diag = network_diag()
+    by_name = {r.get("name"): r for r in diag["results"] if not r.get("error")}
+    speed = speed_test()
+    down = speed.get("download") or {}
+    up = speed.get("upload") or {}
+    down_mbps = down.get("mbps") if down.get("ok") else None
+    up_mbps = up.get("mbps") if up.get("ok") else None
+    nic = _nic_errors()
+
+    reasons = []  # {level, title, detail, fixes:[{action,label}]}
+
+    def add(level, title, detail, fixes=None):
+        reasons.append({"level": level, "title": title, "detail": detail, "fixes": fixes or []})
+
+    # 1) 默认网关
+    gw = by_name.get("本机网关") or by_name.get("本机网关(IPv6)")
+    if gw:
+        if gw.get("loss") == 100 or gw.get("avg_ms") is None:
+            add("bad", "默认网关无响应",
+                "本机到路由器（%s）Ping 完全不通，局域网连接可能已中断。" % (gateway or "未知网关"),
+                [{"action": "renew", "label": "释放并重新获取 IP"}, {"action": "hint_router", "label": "查看重启路由器指引"}])
+        elif gw.get("loss") and gw["loss"] > 10:
+            add("bad", "局域网丢包严重",
+                "到路由器丢包 %s%%，WiFi 信号弱、网线松动或路由器不稳定，网页和视频会明显卡顿。" % gw["loss"],
+                [{"action": "hint_router", "label": "查看重启路由器指引"}, {"action": "hint_wifi", "label": "WiFi 优化建议"}])
+        elif gw.get("avg_ms") and gw["avg_ms"] > 100:
+            add("warn", "路由器响应偏慢",
+                "到默认网关平均 %sms（正常应 <10ms），多为 WiFi 信号差或路由器负载过高。" % gw["avg_ms"],
+                [{"action": "hint_router", "label": "查看重启路由器指引"}])
+    # 2) DNS
+    dns_items = [by_name[k] for k in ("阿里 DNS", "腾讯 DNS", "谷歌 DNS") if k in by_name]
+    alive_dns = [r for r in dns_items if r.get("loss") is not None and r["loss"] < 100]
+    dns_slow = [r for r in alive_dns if r.get("avg_ms") and r["avg_ms"] > 200]
+    dns_loss = [r for r in alive_dns if r.get("loss") and r["loss"] > 5]
+    if not alive_dns and dns_items:
+        add("bad", "DNS 解析异常",
+            "所有公共 DNS 均无法连通，可能导致网页打不开、域名解析失败（常见于 DNS 被劫持或网络策略限制）。",
+            [{"action": "flushdns", "label": "刷新 DNS 缓存"}, {"action": "hint_dns", "label": "查看更换 DNS 指引"}])
+    else:
+        if dns_loss:
+            add("warn", "DNS 丢包",
+                "%d/%d 个 DNS 服务器存在丢包，域名解析不稳定，打开网页会时快时慢。" % (len(dns_loss), len(dns_items)),
+                [{"action": "flushdns", "label": "刷新 DNS 缓存"}, {"action": "hint_dns", "label": "查看更换 DNS 指引"}])
+        elif dns_slow:
+            add("warn", "DNS 响应慢",
+                "DNS 服务器平均延迟最高 %sms（正常应 <50ms），域名解析变慢会让打开网页明显变卡。" % max(r["avg_ms"] for r in dns_slow),
+                [{"action": "flushdns", "label": "刷新 DNS 缓存"}, {"action": "hint_dns", "label": "查看更换 DNS 指引"}])
+    # 3) 外网（百度）
+    ext = by_name.get("百度首页")
+    if ext:
+        if ext.get("loss") == 100 or ext.get("avg_ms") is None:
+            add("bad", "外网连接异常",
+                "无法连通百度等外网站点，可能是运营商线路故障、出口受限或 DNS 未解析到有效地址。",
+                [{"action": "renew", "label": "释放并重新获取 IP"}, {"action": "winsock", "label": "重置 Winsock"}, {"action": "tcpip", "label": "重置 TCP/IP"}])
+        elif ext.get("loss") and ext["loss"] > 5:
+            add("warn", "外网丢包",
+                "访问外网丢包 %s%%，玩游戏、看视频会出现跳 PING 和卡顿。" % ext["loss"],
+                [{"action": "winsock", "label": "重置 Winsock"}, {"action": "tcpip", "label": "重置 TCP/IP"}])
+        elif ext.get("avg_ms") and ext["avg_ms"] > 150:
+            add("warn", "外网延迟偏高",
+                "访问外网平均 %sms，运营商出口线路延迟较大，对延迟敏感的操作会感到卡顿。" % ext["avg_ms"],
+                [{"action": "hint_isp", "label": "查看运营商相关建议"}])
+    # 4) 带宽
+    if down_mbps is not None:
+        if down_mbps < 3:
+            add("bad", "下载带宽严重不足",
+                "实测下载仅 %.1f Mbps，看视频、下载大文件都会很卡，可能被后台程序占满或宽带故障。" % down_mbps,
+                [{"action": "hint_bandwidth", "label": "查看带宽排查建议"}])
+        elif down_mbps < 10:
+            add("warn", "下载带宽偏低",
+                "实测下载 %.1f Mbps，可能被后台下载/网盘占用，或宽带套餐本身带宽有限。" % down_mbps,
+                [{"action": "hint_bandwidth", "label": "查看带宽排查建议"}])
+    if up_mbps is not None:
+        if up_mbps < 2:
+            add("warn", "上传带宽偏低",
+                "实测上传仅 %.1f Mbps，视频通话、上传大文件会明显变慢。" % up_mbps,
+                [{"action": "hint_bandwidth", "label": "查看带宽排查建议"}])
+    # 5) 网卡错误包
+    err_total = nic.get("errors") or 0
+    if err_total and err_total > 50:
+        add("warn", "网卡错误包过多",
+            "网络适配器累计错误包 %s 个，可能存在网卡驱动异常或硬件接触问题。" % err_total,
+            [{"action": "hint_driver", "label": "查看网卡驱动建议"}])
+
+    # 综合判定
+    bads = [r for r in reasons if r["level"] == "bad"]
+    warns = [r for r in reasons if r["level"] == "warn"]
+    if bads:
+        status, status_txt = "bad", "网络卡顿 / 异常"
+    elif warns:
+        status, status_txt = "warn", "网络轻度异常"
+    else:
+        status, status_txt = "ok", "网络状态良好"
+    score = max(0, min(100, 100 - len(bads) * 25 - len(warns) * 10))
+
+    all_fixes = {}
+    for r in reasons:
+        for f in r["fixes"]:
+            all_fixes.setdefault(f["action"], f["label"])
+    return {"status": status, "status_txt": status_txt, "score": score,
+            "gateway": gateway, "ts": time.strftime("%H:%M:%S"),
+            "reasons": reasons,
+            "fixes": [{"action": k, "label": v} for k, v in all_fixes.items()],
+            "speed": {"down_mbps": down_mbps, "up_mbps": up_mbps}}
 
 
 def network_fix(action):
@@ -1812,6 +1973,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(network_diag())
         elif p == "/api/network/speedtest":
             self._send(speed_test())
+        elif p == "/api/network/health":
+            self._send(network_health())
         elif p == "/api/network/fix":
             self._send(network_fix(body.get("action", "")))
         elif p == "/api/perf/diagnose":

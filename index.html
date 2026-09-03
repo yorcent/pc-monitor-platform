@@ -425,10 +425,12 @@ a{color:var(--cyan)}
       <div class="card"><h3>网络接口</h3><div class="tbl-wrap"><table><thead><tr><th>适配器</th><th>IPv4 地址</th><th>子网掩码</th></tr></thead><tbody id="netIf"></tbody></table></div></div>
       <div class="card"><h3>网络诊断与测速 <span class="tag">真实执行</span></h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn primary" onclick="runNetDiag()">Ping 连通性诊断</button>
-          <button class="btn" onclick="runSpeedTest()">真实下载测速</button>
+          <button class="btn primary" onclick="runNetHealth()">一键检测网络状态</button>
+          <button class="btn" onclick="runNetDiag()">Ping 连通性诊断</button>
+          <button class="btn" onclick="runSpeedTest()">真实下载/上传测速</button>
         </div>
-        <div class="op-result" id="netDiagRes" style="max-height:340px"><span style="color:var(--dim)">点击上方按钮开始诊断…</span></div>
+        <div class="op-result" id="netHealthRes" style="max-height:400px;margin-bottom:10px"><span style="color:var(--dim)">点击「一键检测网络状态」：自动检测网关 / DNS / 外网 / 带宽 / 网卡，给出卡顿原因与修复按钮…</span></div>
+        <div class="op-result" id="netDiagRes" style="max-height:200px"><span style="color:var(--dim)">点击上方按钮开始诊断…</span></div>
       </div>
       <div class="card"><h3>网络修复 <span class="tag">全部显式触发 · 管理员操作会弹 UAC</span></h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -519,11 +521,13 @@ a{color:var(--cyan)}
           <h3><span class="ic" style="background:rgba(79,156,254,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f9cfe" stroke-width="2"><path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor"/></svg></span>网络诊断与修复</h3>
           <p>真实 Ping 网关/DNS/百度 判断连通性；真实下载测速；并提供 DNS 刷新、IP 重新获取、Winsock/TCP/IP 重置等一键修复（全部显式触发）。</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <button class="btn primary" onclick="runNetDiag()">开始诊断</button>
-            <button class="btn" onclick="runSpeedTest('opNetSpeed')">下载测速</button>
+            <button class="btn primary" onclick="runNetHealth('opNetHealth')">一键检测网络状态</button>
+            <button class="btn" onclick="runNetDiag()">开始诊断</button>
+            <button class="btn" onclick="runSpeedTest('opNetSpeed')">下载/上传测速</button>
             <button class="btn ghost" onclick="switchTab('net')">前往网络页(接口/教程)</button>
           </div>
-          <div class="op-result" id="opNetSpeed" style="margin-bottom:10px"><span style="color:var(--dim)">点击「下载测速」开始真实测速…</span></div>
+          <div class="op-result" id="opNetHealth" style="margin-bottom:10px"><span style="color:var(--dim)">点击「一键检测网络状态」：给出卡顿原因与修复按钮…</span></div>
+          <div class="op-result" id="opNetSpeed" style="margin-bottom:10px"><span style="color:var(--dim)">点击「下载/上传测速」开始真实测速…</span></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
             <button class="btn small" onclick="netFix('flushdns')">刷新DNS缓存</button>
             <button class="btn small" onclick="netFix('renew')">释放重取IP</button>
@@ -1141,16 +1145,64 @@ async function runSpeedTest(elId='netDiagRes'){
   if(speedTesting) return; speedTesting=true;
   const el=document.getElementById(elId);
   if(!el){ speedTesting=false; return; }
-  el.innerHTML='<span style="color:var(--cyan)">正在下载测速（真实数据）…</span>';
+  el.innerHTML='<span style="color:var(--cyan)">正在测速（下载 + 上传，约 10 秒）…</span>';
   const btn=document.querySelector('button[onclick^="runSpeedTest"]');
   if(btn){ btn.disabled=true; btn.style.opacity=.5; }
   try{
     const r=await api('/api/network/speedtest',{method:'POST'});
-    if(r.ok){ const html=`<b>测速完成</b>（${r.source}）<br>下载速度 <b>${r.mbps} Mbps</b> = ${r.mbs} MB/s<br>下载数据 ${fmtBytes(r.bytes)} · 用时 ${r.duration}s`;
-      el.innerHTML=html; toast('测速完成：'+r.mbps+' Mbps','ok'); }
-    else el.innerHTML='<span class="bad">测速失败：'+esc(r.msg)+'</span>';
+    if(r.ok){
+      const d=r.download||{}, u=r.upload||{};
+      let html='<b>测速完成</b><br>';
+      html+= d.ok?`下载 <b>${d.mbps} Mbps</b>（${esc(d.source)}，${fmtBytes(d.bytes)} · ${d.duration}s）`:`下载 <span class="bad">${esc(d.msg||'失败')}</span>`;
+      html+='<br>';
+      html+= u.ok?`上传 <b>${u.mbps} Mbps</b>（${esc(u.source)}，${fmtBytes(u.bytes)} · ${u.duration}s）`:`上传 <span class="bad">${esc(u.msg||'失败')}</span>`;
+      el.innerHTML=html; toast('测速完成：下载 '+d.mbps+' / 上传 '+u.mbps+' Mbps','ok');
+    }
+    else el.innerHTML='<span class="bad">测速失败：'+esc(r.msg||'未知错误')+'</span>';
   }catch(e){ el.innerHTML='<span class="bad">测速失败：'+esc(e.message)+'</span>'; }
   finally{ speedTesting=false; if(btn){ btn.disabled=false; btn.style.opacity=1; } }
+}
+
+/* ================= 一键网络状态检测 ================= */
+const NET_HEALTH_HINTS={
+  hint_router:'重启路由器指引：将路由器断电 30 秒后再通电，等待 1-2 分钟完全启动；若仍卡顿，尝试同时重启光猫。检查 WiFi 信号强度，尽量靠近路由器。',
+  hint_wifi:'WiFi 优化建议：1) 优先连接 5GHz 频段，避开 2.4GHz 干扰；2) 靠近路由器减少墙体阻隔；3) 检查是否有其他设备大量占用 WiFi；4) 更新网卡驱动。',
+  hint_dns:'更换 DNS 指引：设置 → 网络和 Internet → 更改适配器选项 → 双击当前网卡 → 属性 → Internet 协议版本 4 (TCP/IPv4) → 使用自定义 DNS，填 223.5.5.5（阿里）和 119.29.29.29（腾讯）。',
+  hint_isp:'运营商相关建议：若外网持续高延迟，可能是运营商出口线路问题，建议联系宽带运营商报障；也可尝试重启光猫后再检测。',
+  hint_bandwidth:'带宽排查建议：1) 关闭后台正在下载/上传的程序（网盘、迅雷、Steam、Windows 更新）；2) 到「进程」页结束占用高的后台进程；3) 若多台设备共用宽带，检查其他设备占用；4) 仍慢可能是宽带套餐带宽有限或线路问题。',
+  hint_driver:'网卡驱动建议：打开 设备管理器 → 网络适配器 → 右键当前网卡 → 更新驱动程序 → 自动搜索；或到主板/网卡厂商官网下载最新驱动。'
+};
+async function runNetHealth(elId='netHealthRes'){
+  const el=document.getElementById(elId);
+  if(!el) return;
+  el.innerHTML='<span style="color:var(--cyan)">正在逐项检测网络（网关 / DNS / 外网 / 带宽 / 网卡）…</span>';
+  try{
+    const r=await api('/api/network/health',{method:'POST'});
+    const s=r.status||'ok';
+    const color=s==='ok'?'var(--green)':(s==='warn'?'var(--amber)':'var(--red)');
+    let html=`<div style="margin-bottom:8px">网络状态：<b style="color:${color}">${esc(r.status_txt)}</b> · 健康评分 <b>${r.score}/100</b> · 网关 ${esc(r.gateway||'-')} · ${esc(r.ts)}</div>`;
+    if(r.reasons&&r.reasons.length){
+      html+='<div style="margin-bottom:4px;color:var(--muted)">检测到以下情况（每条可单独修复）：</div>';
+      for(const rz of r.reasons){
+        const c=rz.level==='bad'?'var(--red)':(rz.level==='warn'?'var(--amber)':'var(--green)');
+        const icon=rz.level==='bad'?'⛔':(rz.level==='warn'?'⚠️':'✔');
+        html+=`<div style="border-left:3px solid ${c};padding:7px 9px;margin:7px 0;background:rgba(127,127,127,.07);border-radius:6px">`;
+        html+=`<div><b style="color:${c}">${icon} ${esc(rz.title)}</b></div>`;
+        html+=`<div style="color:var(--muted);font-size:12px;margin:3px 0;line-height:1.5">${esc(rz.detail)}</div>`;
+        if(rz.fixes&&rz.fixes.length){
+          html+='<div style="margin-top:5px">'+rz.fixes.map(f=>`<button class="btn small" onclick="netHealthFix('${f.action}')">${esc(f.label)}</button>`).join(' ')+'</div>';
+        }
+        html+='</div>';
+      }
+    } else {
+      html+='<div style="color:var(--green);margin-top:4px">未发现明显问题，各项网络指标正常。</div>';
+    }
+    el.innerHTML=html;
+  }catch(e){ el.innerHTML='<span class="bad">检测失败：'+esc(e.message)+'</span>'; }
+}
+async function netHealthFix(action){
+  if(NET_HEALTH_HINTS[action]){ await confirmAction('建议', NET_HEALTH_HINTS[action], '知道了'); return; }
+  netFix(action);
 }
 async function netFix(action){
   const labels={flushdns:'刷新 DNS 缓存',renew:'释放并重新获取 IP',winsock:'重置 Winsock',tcpip:'重置 TCP/IP 协议栈'};
