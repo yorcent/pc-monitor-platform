@@ -11,3 +11,7 @@ _u*.png
 
 # 本地编辑中间文件
 _inline.js
+
+# PyInstaller 构建产物
+build/
+dist/

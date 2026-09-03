@@ -157,9 +157,16 @@ python run.py          # 推荐：带守护进程
 如需**对方完全不装 Python**，可改用 PyInstaller 打包成单文件 exe（一次性打包，之后免安装）：
 ```
 pip install pyinstaller
-pyinstaller --onefile --noconsole --add-data "echarts.min.js;." run.py
+pyinstaller --onefile --noconsole --name "PC-Monitor" --add-data "index.html;." --add-data "echarts.min.js;." server.py
 ```
-（打包前建议把 server.py 里浏览器自动打开、以及本 README 的启动说明同步到 exe 场景，再重新验证一次。）
+- 打包产物：`dist\PC-Monitor.exe`（约 9.5MB，单文件）。
+- **对方使用**：直接双击 `PC-Monitor.exe` 即可自动启动服务并打开浏览器界面，无需安装 Python、
+  无需联网（index.html / echarts 均已打入 exe）。退出：页面左下角「结束运行本系统」。
+- **入口用 `server.py` 而非 `run.py`**（exe 已内嵌服务，不再需要守护进程拉子进程）；
+  必须把 `index.html` 与 `echarts.min.js` 一起 `--add-data` 打入，否则页面白屏。
+- 打包前请确认 `server.py` 的"自动打开浏览器"逻辑符合预期（exe 启动后 1.2 秒自动打开默认浏览器；
+  如需静默启动可加 `--restarted` 参数）。
+- 已在本机实测：exe 启动 → 页面/图表/真实数据接口均正常 → 页面停止按钮可正常退出进程。
 
 ## 目录结构
 
