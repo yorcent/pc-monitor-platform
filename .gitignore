@@ -1,0 +1,13 @@
+# 运行时/调试临时文件
+.open.log
+.restarted
+.stop_flag
+__pycache__/
+_chrome_tmp*/
+*.pyc
+
+# 临时下载的用户反馈截图
+_u*.png
+
+# 本地编辑中间文件
+_inline.js

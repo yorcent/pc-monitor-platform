@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PC 性能监测与优化平台</title>
+<script src="echarts.min.js"></script>
+<style>
+:root{
+  --bg:#0a0e16; --bg2:#0d1320; --card:#111a2c; --card2:#0e1626;
+  --border:#1c2940; --border2:#24354f;
+  --txt:#dbe6f7; --muted:#8296b3; --dim:#5b6b85;
+  --cyan:#22d3ee; --blue:#4f9cfe; --green:#34d399; --amber:#fbbf24; --red:#f87171; --purple:#a78bfa;
+  --mono:'Consolas','Cascadia Mono','Courier New',monospace;
+}
+body.light{
+  --bg:#eef2f8; --bg2:#e6ecf5; --card:#ffffff; --card2:#f4f7fc;
+  --border:#d5dde9; --border2:#b9c6da;
+  --txt:#1a2740; --muted:#5a6b85; --dim:#8b99b0;
+  --cyan:#0891b2; --blue:#2563eb; --green:#059669; --amber:#d97706; --red:#dc2626; --purple:#7c3aed;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 600px at 20% -10%, #12203a 0%, var(--bg) 55%);
+  color:var(--txt); font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;
+  font-size:14px; overflow:hidden; transition:background .3s, color .3s;
+}
+body.light{background:linear-gradient(160deg,#eef3fb 0%,#e2eaf5 100%)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#22334d;border-radius:4px}
+body.light ::-webkit-scrollbar-thumb{background:#b9c6da}
+::-webkit-scrollbar-track{background:transparent}
+.layout{display:flex;height:100vh}
+
+/* ===== 侧边栏 ===== */
+.sidebar{
+  width:224px;flex-shrink:0;background:linear-gradient(180deg,#0c1424,#0a0f1b);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 12px;transition:.3s;
+}
+body.light .sidebar{background:linear-gradient(180deg,#f4f8fe,#eaf0fa)}
+.logo{display:flex;align-items:center;gap:10px;padding:4px 10px 18px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.logo .dot{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#22d3ee,#4f9cfe);display:flex;align-items:center;justify-content:center;box-shadow:0 0 18px rgba(34,211,238,.45)}
+.logo .dot svg{width:20px;height:20px}
+.logo h1{font-size:15px;font-weight:700;letter-spacing:.5px}
+.logo small{color:var(--muted);font-size:10px;display:block;margin-top:2px}
+.nav{flex:1;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:2px 0;border-radius:9px;color:var(--muted);cursor:pointer;transition:.18s;font-size:13.5px;border:1px solid transparent}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;opacity:.85}
+.nav-item:hover{color:var(--txt);background:#14203a}
+body.light .nav-item:hover{background:#dfe8f5;color:var(--txt)}
+.nav-item.active{color:var(--cyan);background:linear-gradient(90deg,rgba(34,211,238,.14),rgba(79,156,254,.06));border-color:rgba(34,211,238,.35)}
+body.light .nav-item.active{background:linear-gradient(90deg,rgba(8,145,178,.12),rgba(37,99,235,.06))}
+.side-foot{padding:10px 8px 0;border-top:1px solid var(--border);color:var(--dim);font-size:11px;line-height:1.7}
+.side-foot .live{display:flex;align-items:center;gap:6px;color:var(--green);margin-bottom:6px}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.stopbtn{margin-top:10px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:9px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--red);cursor:pointer;font-size:12.5px;transition:.18s}
+.stopbtn:hover{background:rgba(248,113,113,.18)}
+
+/* ===== 主区 ===== */
+.main{flex:1;overflow-y:auto;padding:16px 20px 40px;position:relative}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:2px 2px 14px;flex-wrap:wrap;gap:8px}
+.topbar .crumbs{display:flex;align-items:center;gap:10px}
+.topbar h2{font-size:18px;font-weight:700;letter-spacing:.3px}
+.topbar .sub{color:var(--muted);font-size:12px}
+.stats-strip{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;color:var(--muted)}
+.chip b{color:var(--txt);font-family:var(--mono);font-size:13px}
+.chip .cv{color:var(--cyan)} .chip .cg{color:var(--green)} .chip .ca{color:var(--amber)} .chip .cr{color:var(--red)} .chip .cb{color:var(--blue)}
+.refresh-tag{font-size:11px;color:var(--dim);border:1px dashed var(--border2);padding:4px 8px;border-radius:6px}
+.refresh-tag b{color:var(--cyan);font-family:var(--mono)}
+.theme-btn{width:34px;height:34px;border-radius:8px;border:1px solid var(--border2);background:var(--card);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:.18s}
+.theme-btn:hover{color:var(--cyan);border-color:var(--cyan)}
+.clock{font-family:var(--mono);color:var(--muted);font-size:12px;border-left:1px solid var(--border);padding-left:12px}
+.clock b{color:var(--cyan);font-size:13px;display:block;text-align:right}
+
+/* ===== 面板 ===== */
+.tab{display:none;animation:fade .25s}
+.tab.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.grid{display:grid;gap:14px}
+.grid.g4{grid-template-columns:repeat(4,1fr)}
+.grid.g3{grid-template-columns:repeat(3,1fr)}
+.grid.g2{grid-template-columns:repeat(2,1fr)}
+.grid.g5{grid-template-columns:repeat(5,1fr)}
+.card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:12px;padding:14px;position:relative;overflow:hidden;margin-bottom:14px}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),transparent 60%);opacity:.55}
+.card h3{font-size:13px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.card h3 .tag{margin-left:auto;font-size:10px;color:var(--dim);font-weight:400}
+.chart{width:100%;height:150px}
+.chart.tall{height:260px}
+.bignum{font-family:var(--mono);font-size:30px;font-weight:700;line-height:1.1}
+.bignum small{font-size:13px;color:var(--muted);font-weight:400;margin-left:3px}
+.stat-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12.5px}
+.stat-row:last-child{border-bottom:none}
+.stat-row .k{color:var(--muted)}
+.stat-row .v{font-family:var(--mono);color:var(--txt)}
+
+.bars{margin-top:6px}
+.bar{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:12px}
+.bar .bl{width:52px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .bt{flex:1;height:9px;background:#16233b;border-radius:5px;overflow:hidden}
+body.light .bar .bt{background:#dde6f2}
+.bar .bf{height:100%;border-radius:5px;background:linear-gradient(90deg,#22d3ee,#4f9cfe);transition:width .6s}
+.bar .bf.warn{background:linear-gradient(90deg,#fbbf24,#f97316)}
+.bar .bf.danger{background:linear-gradient(90deg,#f87171,#ef4444)}
+.bar .bv{width:52px;text-align:right;font-family:var(--mono);color:var(--txt)}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--muted);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1}
+td{padding:7px 10px;border-bottom:1px solid rgba(28,41,64,.5);font-family:var(--mono)}
+body.light td{border-bottom:1px solid #e3eaf4}
+tr:hover td{background:rgba(34,211,238,.05)}
+.tbl-wrap{max-height:430px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.tbl-wrap table thead th{background:#0e1727}
+body.light .tbl-wrap table thead th{background:#eef3fb}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9px;border:1px solid var(--border2);background:linear-gradient(180deg,#15233d,#0f1a30);color:var(--txt);cursor:pointer;font-size:13px;font-weight:600;transition:.18s;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+body.light .btn{background:linear-gradient(180deg,#ffffff,#eef3fb);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.btn:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 14px rgba(34,211,238,.25);transform:translateY(-1px)}
+.btn.primary{background:linear-gradient(135deg,#22d3ee,#4f9cfe);border:none;color:#04121f}
+.btn.primary:hover{box-shadow:0 0 20px rgba(34,211,238,.5)}
+.btn.danger{background:linear-gradient(135deg,#f87171,#ef4444);border:none;color:#1a0404}
+.btn.danger:hover{box-shadow:0 0 20px rgba(248,113,113,.5)}
+.btn.ghost{background:transparent;border-color:var(--border)}
+.btn.small{padding:4px 10px;font-size:11.5px;border-radius:6px}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn svg{width:15px;height:15px}
+.btn.small svg{width:12px;height:12px}
+
+.op-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.op-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.op-card h3{font-size:15px;display:flex;align-items:center;gap:9px}
+.op-card h3 .ic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.op-card p{color:var(--muted);font-size:12.5px;line-height:1.6}
+.op-result{margin-top:6px;background:#0a111f;border:1px solid var(--border);border-radius:9px;padding:12px;font-size:12.5px;line-height:1.8;max-height:260px;overflow-y:auto}
+body.light .op-result{background:#f6f9fe}
+.op-result b{color:var(--cyan)}
+.op-result .ok{color:var(--green)} .op-result .bad{color:var(--red)}
+.log-line{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:2px 0;border-bottom:1px dashed rgba(28,41,64,.4)}
+.log-line .t{color:var(--dim);margin-right:8px}
+
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.info-item{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:10px 13px}
+.info-item .k{color:var(--muted);font-size:11.5px;margin-bottom:3px}
+.info-item .v{font-family:var(--mono);font-size:13px;word-break:break-all}
+
+.searchbar{display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.searchbar input{flex:1;min-width:180px;background:var(--card);border:1px solid var(--border);color:var(--txt);padding:9px 13px;border-radius:8px;font-size:13px;outline:none}
+.searchbar input:focus{border-color:var(--cyan)}
+select{background:var(--card);border:1px solid var(--border);color:var(--txt);padding:9px 13px;border-radius:8px;font-size:13px;outline:none}
+select:focus{border-color:var(--cyan)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-family:var(--mono)}
+.pill.cyan{background:rgba(34,211,238,.12);color:var(--cyan)}
+.pill.green{background:rgba(52,211,153,.12);color:var(--green)}
+.pill.amber{background:rgba(251,191,36,.12);color:var(--amber)}
+.pill.red{background:rgba(248,113,113,.12);color:var(--red)}
+.score-ring{display:flex;align-items:center;gap:18px}
+.score-ring .ring{width:130px;height:130px;flex-shrink:0}
+.score-tips{flex:1}
+.score-tips li{list-style:none;padding:7px 10px;margin:5px 0;background:var(--card2);border-left:3px solid var(--amber);border-radius:6px;font-size:12.5px;color:var(--txt);line-height:1.5}
+.speed-nums{display:flex;gap:12px;margin:6px 0}
+.speed-box{flex:1;text-align:center;padding:14px;background:var(--card2);border:1px solid var(--border);border-radius:10px}
+.speed-box .lab{color:var(--muted);font-size:11px;margin-bottom:5px}
+.speed-box .num{font-family:var(--mono);font-size:22px;font-weight:700}
+.up{color:var(--blue)} .down{color:var(--cyan)}
+.toast{position:fixed;top:18px;right:18px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast .tmsg{padding:10px 16px;border-radius:9px;background:rgba(13,22,38,.95);border:1px solid var(--border2);color:var(--txt);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:slidein .25s}
+body.light .toast .tmsg{background:rgba(255,255,255,.97);border-color:#cbd7e8}
+.toast .tmsg.ok{border-color:rgba(52,211,153,.5)} .toast .tmsg.err{border-color:rgba(248,113,113,.5)}
+@keyframes slidein{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+.empty{padding:26px;text-align:center;color:var(--dim);font-size:12.5px}
+
+/* 确认弹窗 */
+.modal-mask{position:fixed;inset:0;background:rgba(4,8,16,.7);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal{width:440px;max-width:92vw;background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.modal .modal-body{font-size:13px;color:var(--muted);line-height:1.8;max-height:50vh;overflow-y:auto;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:16px}
+.modal .modal-body b{color:var(--txt)}
+.modal-btns{display:flex;justify-content:flex-end;gap:10px}
+
+/* 折叠教程 */
+details{background:var(--card2);border:1px solid var(--border);border-radius:9px;margin-bottom:8px;overflow:hidden}
+details summary{padding:11px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--txt);list-style:none;display:flex;align-items:center;gap:8px}
+details summary::before{content:'▸';color:var(--cyan);transition:.2s}
+details[open] summary::before{transform:rotate(90deg)}
+details .dbody{padding:4px 16px 14px;color:var(--muted);font-size:12.5px;line-height:1.9}
+details .dbody .fix{color:var(--green)}
+a{color:var(--cyan)}
+.tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.tag-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--card2);color:var(--txt);cursor:pointer;font-size:12.5px;transition:.15s}
+.tag-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.tag-btn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(34,211,238,.08)}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#04121f" stroke-width="2.2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4"/><path d="M7 9h.01M10 9h.01M7 12h.01"/></svg></div>
+      <div><h1>性能监测台</h1><small>PC MONITOR &amp; OPTIMIZER</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-item active" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>总览</div>
+      <div class="nav-item" data-tab="cpu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="10" y="10" width="4" height="4"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>CPU</div>
+      <div class="nav-item" data-tab="mem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M10 6v12M14 6v12M18 6v12"/></svg>内存</div>
+      <div class="nav-item" data-tab="disk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="5" r="1" fill="currentColor"/><path d="M12 2v3M20 12h-3M12 12h3"/></svg>磁盘</div>
+      <div class="nav-item" data-tab="gpu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="14" height="12" rx="2"/><path d="M21 9v6M7 10l-1 4h2z"/></svg>显卡</div>
+      <div class="nav-item" data-tab="net"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor"/></svg>网络</div>
+      <div class="nav-item" data-tab="proc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 14h16M10 4v16M14 4v16"/></svg>进程</div>
+      <div class="nav-item" data-tab="startup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M6 4v2M10 4v2M14 4v2M18 4v2"/><circle cx="8" cy="9" r="1.5"/><circle cx="16" cy="15" r="1.5"/></svg>启动项</div>
+      <div class="nav-item" data-tab="drivers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M9 5v4M15 5v4M7 15h4M14 15h3"/><rect x="7" y="13" width="4" height="3" rx="1"/></svg>驱动</div>
+      <div class="nav-item" data-tab="sys"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>系统信息</div>
+      <div class="nav-item" data-tab="ops"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 12l2 2 4-4"/></svg>操作中心</div>
+    </nav>
+    <div class="side-foot">
+      <div class="live"><span class="pulse"></span><span id="conn">数据采集已连接</span></div>
+      <div id="footUptime">运行时间 --</div>
+      <div>端口 127.0.0.1:8765</div>
+      <button class="stopbtn" onclick="stopServer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>结束运行本系统</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="crumbs">
+        <h2 id="pageTitle">总览</h2>
+        <span class="sub" id="pageSub">实时本机性能数据</span>
+      </div>
+      <div class="stats-strip">
+        <span class="refresh-tag">刷新间隔 <b>1.5s</b> · 上次 <b id="lastRefresh">--:--:--</b></span>
+        <div class="chip">CPU <b class="cv" id="sCpu">--</b></div>
+        <div class="chip">内存 <b class="cb" id="sMem">--</b></div>
+        <div class="chip">GPU <b class="ca" id="sGpu">--</b></div>
+        <div class="chip">下载 <b class="cg" id="sDown">--</b></div>
+        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="切换亮/暗主题">☀</button>
+        <div class="clock"><b id="clock">--:--:--</b><span id="dateStr"></span></div>
+      </div>
+    </div>
+
+    <!-- ============ 总览 ============ -->
+    <section class="tab active" id="tab-overview">
+      <div class="card">
+        <h3>电脑健康状态 <span class="tag">综合性能评级 · 每 5 秒刷新</span>
+          <button class="btn small primary" onclick="openCheckup()" style="margin-left:10px">⚡ 一键体检</button>
+          <select id="checkupHist" onchange="viewCheckupHist(this.value)" style="width:auto;padding:4px 8px;font-size:11px;margin-left:8px;display:none" title="历史体检记录"></select>
+        </h3>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:stretch">
+          <div style="flex:0 0 170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
+            <div class="ring" id="ovHealthGauge" style="width:150px;height:150px"></div>
+            <div style="text-align:center"><span class="pill" id="ovHealthGrade">--</span></div>
+          </div>
+          <div style="flex:1;min-width:280px">
+            <div id="ovHealthItems" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px"></div>
+          </div>
+          <div style="flex:1;min-width:250px">
+            <h3 style="font-size:12.5px;color:var(--muted);margin-bottom:6px">当前建议处理事项</h3>
+            <ul id="ovSuggestions" style="list-style:none"></ul>
+          </div>
+          <div style="flex:0 0 210px">
+            <h3 style="font-size:12.5px;color:var(--muted);margin-bottom:6px">驱动状态 <a href="javascript:void(0)" onclick="goTab('drivers');return false" style="font-size:11px">查看全部 →</a></h3>
+            <div id="ovDrivers" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid g5">
+        <div class="card"><h3>CPU 占用率</h3><div class="chart" id="ovCpu"></div></div>
+        <div class="card"><h3>内存使用率</h3><div class="chart" id="ovMem"></div></div>
+        <div class="card"><h3>系统盘使用率</h3><div class="chart" id="ovDisk"></div></div>
+        <div class="card"><h3>GPU 占用率</h3><div class="chart" id="ovGpu"></div></div>
+        <div class="card"><h3>剩余电量 <span class="tag" id="ovBattTag">--</span></h3><div class="chart" id="ovBatt"></div></div>
+      </div>
+      <div class="grid g3">
+        <div class="card"><h3>CPU 历史趋势 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="ovCpuLine"></div></div>
+        <div class="card"><h3>内存历史趋势 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="ovMemLine"></div></div>
+        <div class="card"><h3>网络吞吐 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="ovNetLine"></div></div>
+      </div>
+      <div class="grid g5">
+        <div class="card"><h3>可用内存</h3><div class="bignum" id="ovAvail">--</div><div class="stat-row" style="margin-top:8px"><span class="k">总容量</span><span class="v" id="ovMemTotal">--</span></div></div>
+        <div class="card"><h3>C 盘剩余</h3><div class="bignum" id="ovDiskFree">--</div><div class="stat-row" style="margin-top:8px"><span class="k">已用</span><span class="v" id="ovDiskUsed">--</span></div></div>
+        <div class="card"><h3>实时网速</h3><div class="bignum"><span class="cv" id="ovDown">--</span></div><div class="stat-row" style="margin-top:8px"><span class="k">上行</span><span class="v" id="ovUp">--</span></div></div>
+        <div class="card"><h3>显卡温度</h3><div class="bignum"><span id="ovGpuTemp">--</span><small>℃</small></div><div class="stat-row" style="margin-top:8px"><span class="k">显存占用</span><span class="v" id="ovVram">--</span></div></div>
+        <div class="card"><h3>运行进程</h3><div class="bignum" id="ovProcs">--</div><div class="stat-row" style="margin-top:8px"><span class="k">运行时间</span><span class="v" id="ovUptime">--</span></div></div>
+      </div>
+    </section>
+
+    <!-- ============ CPU ============ -->
+    <section class="tab" id="tab-cpu">
+      <div class="grid g3">
+        <div class="card"><h3>CPU 实时占用 <span class="tag">1s 后台采样</span></h3><div class="chart tall" id="cpuGauge"></div></div>
+        <div class="card"><h3>占用率历史 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="cpuLine"></div></div>
+        <div class="card"><h3>处理器信息</h3>
+          <div class="stat-row"><span class="k">型号</span><span class="v" id="cpuModel">--</span></div>
+          <div class="stat-row"><span class="k">逻辑核心</span><span class="v" id="cpuLogical">--</span></div>
+          <div class="stat-row"><span class="k">物理核心</span><span class="v" id="cpuPhysical">--</span></div>
+          <div class="stat-row"><span class="k">当前频率</span><span class="v" id="cpuFreq">--</span></div>
+          <div class="stat-row"><span class="k">CPU 架构</span><span class="v" id="cpuArch">--</span></div>
+        </div>
+      </div>
+      <div class="card"><h3>各核心占用</h3><div class="bars" id="cpuCores"></div></div>
+      <div class="card"><h3>CPU 占用 Top 进程 <span class="tag">每5秒刷新</span></h3><div class="tbl-wrap" style="max-height:320px"><table><thead><tr><th>PID</th><th>进程名</th><th>用户</th><th>CPU %</th><th>内存</th><th style="width:80px">操作</th></tr></thead><tbody id="cpuProcTop"></tbody></table></div></div>
+    </section>
+
+    <!-- ============ 内存 ============ -->
+    <section class="tab" id="tab-mem">
+      <div class="grid g3">
+        <div class="card"><h3>内存占用</h3><div class="chart tall" id="memGauge"></div></div>
+        <div class="card"><h3>内存历史 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="memLine"></div></div>
+        <div class="card"><h3>内存概况</h3>
+          <div class="stat-row"><span class="k">总容量</span><span class="v" id="memTotal">--</span></div>
+          <div class="stat-row"><span class="k">已使用</span><span class="v" id="memUsed">--</span></div>
+          <div class="stat-row"><span class="k">可用</span><span class="v" id="memAvail">--</span></div>
+          <div class="stat-row"><span class="k">交换分区</span><span class="v" id="memSwap">--</span></div>
+          <div class="stat-row" style="margin-top:8px"><button class="btn primary" id="memCleanBtn" onclick="cleanMemory()">清理内存（真实释放）</button></div>
+          <div id="memCleanRes" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="card"><h3>内存占用进程（全部）<span class="tag">按内存排序 · 可结束进程</span></h3>
+        <div class="searchbar" style="margin-top:6px"><input id="memProcSearch" placeholder="搜索进程名 / PID…" oninput="renderMemProcs()"><button class="btn ghost small" onclick="loadMemProcs()">刷新</button><span style="color:var(--muted);font-size:12px" id="memProcCount"></span></div>
+        <div class="tbl-wrap" style="max-height:380px"><table><thead><tr><th>PID</th><th>进程名</th><th>用户</th><th>内存占用</th><th>CPU %</th><th style="width:80px">操作</th></tr></thead><tbody id="memProcTbody"><tr><td colspan="6" style="color:var(--dim);text-align:center">加载中…</td></tr></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ============ 磁盘 ============ -->
+    <section class="tab" id="tab-disk">
+      <div class="grid g2">
+        <div class="card"><h3>分区使用情况</h3><div class="bars" id="diskParts"></div><div class="stat-row"><span class="k">磁盘读取</span><span class="v" id="diskRead">--</span></div><div class="stat-row"><span class="k">磁盘写入</span><span class="v" id="diskWrite">--</span></div></div>
+        <div class="card"><h3>磁盘读写吞吐 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="diskIoLine"></div></div>
+      </div>
+      <div class="card"><h3>物理磁盘健康状态 <span class="tag">来自 WMI</span></h3><div id="diskHealth" class="empty">正在读取…</div></div>
+      <div class="card"><h3>建议清理项 <span class="tag">真实统计 · 全部需你显式点击</span></h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn primary" id="cleanupBatchBtn" onclick="batchCleanup()" disabled>清理选中 (0)</button>
+          <span style="color:var(--dim);font-size:11.5px">勾选多项后统一预览并一次确认执行（仍保持显式二次确认）</span>
+        </div>
+        <div id="cleanupSuggest"><div class="empty">正在统计…</div></div></div>
+      <div class="card"><h3>磁盘占用地图 <span class="tag">各目录真实占用 · 点击钻取 · 5分钟缓存</span></h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <select id="tdPath"><option value="C:\">C 盘</option><option value="D:\" selected>D 盘</option></select>
+          <button class="btn" onclick="loadTopDirs($('tdPath').value)">查看占用</button>
+          <span style="color:var(--muted);font-size:12px" id="tdState"></span>
+        </div>
+        <div id="tdCrumb" style="font-size:12px;color:var(--cyan);margin-bottom:8px;word-break:break-all"></div>
+        <div class="grid g2">
+          <div><div class="chart" id="tdPie" style="height:320px"></div></div>
+          <div><div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>名称</th><th>类型</th><th>大小</th><th style="width:80px">占比</th><th style="width:120px">操作</th></tr></thead><tbody id="tdTbody"><tr><td colspan="5" style="color:var(--dim);text-align:center">点击「查看占用」开始统计（首次稍慢）</td></tr></tbody></table></div></div>
+        </div>
+      </div>
+      <div class="card"><h3>磁盘空间分析 <span class="tag">真实扫描 · 删除进回收站可恢复</span></h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <select id="scanPath"></select>
+          <select id="scanDepth">
+            <option value="1">深度 1（快）</option><option value="2" selected>深度 2（推荐）</option><option value="3">深度 3（较全）</option><option value="4">深度 4（全）</option><option value="5">深度 5（最全·慢）</option>
+          </select>
+          <button class="btn" id="scanBtn" onclick="runDiskAnalyze()">开始分析</button>
+          <span id="scanState" style="color:var(--muted);font-size:12px"></span>
+        </div>
+        <div style="color:var(--dim);font-size:11.5px;margin-bottom:8px">深度说明：深度 N = 从所选盘符根目录向下扫描到第 N 层子目录内的文件（深度1=根目录+第1层，深度2=到第2层…深度5=到第5层，层数越多越慢越全）。文件列表仅展示 ≥50MB 的大文件。</div>
+        <div class="grid g2">
+          <div><h3 style="font-size:12.5px;color:var(--muted);margin-bottom:8px">占用最大的文件夹</h3><div class="tbl-wrap" style="max-height:320px"><table><thead><tr><th>路径</th><th>大小</th><th style="width:70px">操作</th></tr></thead><tbody id="scanFolders"></tbody></table></div></div>
+          <div><h3 style="font-size:12.5px;color:var(--muted);margin-bottom:8px">最大的文件</h3><div class="tbl-wrap" style="max-height:320px"><table><thead><tr><th>文件</th><th>大小</th><th style="width:70px">操作</th></tr></thead><tbody id="scanFiles"></tbody></table></div></div>
+        </div>
+      </div>
+      <div class="card"><h3>专项清理 <span class="tag">真实扫描 · 全部需你显式点击 · 删除进回收站可恢复</span></h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <select id="specPath"></select>
+          <button class="btn" onclick="typeScan('video')">视频专清</button>
+          <button class="btn" onclick="typeScan('archive')">压缩包专清</button>
+          <button class="btn" onclick="typeScan('installer')">安装包专清</button>
+          <button class="btn primary" onclick="wechatScan()">微信专清</button>
+          <span style="color:var(--dim);font-size:11.5px">（按类型在所选盘找大文件，全盘较深扫描；微信专清自动探测微信数据目录，缓存/临时可一键清理，聊天记录仅查看）</span>
+        </div>
+        <div id="specState" style="color:var(--muted);font-size:12px;margin-bottom:8px"></div>
+        <div id="specWechat"></div>
+        <div id="specResult"></div>
+      </div>
+    </section>
+
+    <!-- ============ 驱动 ============ -->
+    <section class="tab" id="tab-drivers">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+            <span>驱动总数 <b id="drvTotal" style="font-family:var(--mono)">--</b></span>
+            <span style="color:var(--green)">正常 <b id="drvOk" style="font-family:var(--mono)">--</b></span>
+            <span style="color:var(--red)">异常 <b id="drvErr" style="font-family:var(--mono)">--</b></span>
+            <span style="color:var(--amber)">未知 <b id="drvUnk" style="font-family:var(--mono)">--</b></span>
+            <span style="color:var(--muted);font-size:11.5px" id="drvTs"></span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="drvSearch" class="searchbar" style="width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--txt);outline:none" placeholder="搜索驱动名称 / 类别…" oninput="renderDrivers()">
+            <button class="btn" onclick="openSys('devmgmt')">打开设备管理器</button>
+          </div>
+        </div>
+        <div class="tbl-wrap" style="max-height:520px"><table><thead><tr><th>状态</th><th>设备/驱动</th><th>类别</th><th>错误码</th><th>实例 ID</th></tr></thead><tbody id="drvTbody"><tr><td colspan="5" style="color:var(--dim)">驱动扫描中…（首次约几秒）</td></tr></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ============ 显卡 ============ -->
+    <section class="tab" id="tab-gpu">
+      <div class="grid g2">
+        <div class="card"><h3 id="gpuGaugeTitle">GPU 占用</h3><div class="chart tall" id="gpuGauge"></div></div>
+        <div class="card"><h3>GPU 占用历史 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="gpuLine"></div></div>
+      </div>
+      <div class="card"><h3>显卡实时数据 <span class="tag">nvidia-smi 实时</span></h3><div id="gpuCards"></div></div>
+      <div class="card"><h3>使用 GPU 的进程 <span class="tag">nvidia-smi</span></h3><div class="tbl-wrap" style="max-height:260px"><table><thead><tr><th>PID</th><th>进程</th><th>显存占用</th><th style="width:80px">操作</th></tr></thead><tbody id="gpuAppsTbody"></tbody></table></div></div>
+    </section>
+
+    <!-- ============ 网络 ============ -->
+    <section class="tab" id="tab-net">
+      <div class="grid g2">
+        <div class="card">
+          <h3>实时网络速度</h3>
+          <div class="speed-nums">
+            <div class="speed-box"><div class="lab">下载</div><div class="num down" id="netDown">--</div></div>
+            <div class="speed-box"><div class="lab">上传</div><div class="num up" id="netUp">--</div></div>
+          </div>
+          <div class="stat-row"><span class="k">累计接收</span><span class="v" id="netTotalRecv">--</span></div>
+          <div class="stat-row"><span class="k">累计发送</span><span class="v" id="netTotalSent">--</span></div>
+          <div class="stat-row"><span class="k">默认网关</span><span class="v" id="netGw">--</span></div>
+        </div>
+        <div class="card"><h3>网络吞吐历史 <span class="tag">最近3分钟</span></h3><div class="chart tall" id="netLine"></div></div>
+      </div>
+      <div class="card"><h3>网络接口</h3><div class="tbl-wrap"><table><thead><tr><th>适配器</th><th>IPv4 地址</th><th>子网掩码</th></tr></thead><tbody id="netIf"></tbody></table></div></div>
+      <div class="card"><h3>网络诊断与测速 <span class="tag">真实执行</span></h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn primary" onclick="runNetDiag()">Ping 连通性诊断</button>
+          <button class="btn" onclick="runSpeedTest()">真实下载测速</button>
+        </div>
+        <div class="op-result" id="netDiagRes" style="max-height:340px"><span style="color:var(--dim)">点击上方按钮开始诊断…</span></div>
+      </div>
+      <div class="card"><h3>网络修复 <span class="tag">全部显式触发 · 管理员操作会弹 UAC</span></h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="btn" onclick="netFix('flushdns')">刷新 DNS 缓存</button>
+          <button class="btn" onclick="netFix('renew')">释放并重新获取 IP</button>
+          <button class="btn" onclick="netFix('winsock')">重置 Winsock</button>
+          <button class="btn" onclick="netFix('tcpip')">重置 TCP/IP 协议栈</button>
+        </div>
+        <div class="op-result" id="netFixRes" style="max-height:200px"><span style="color:var(--dim)">选择上方操作（会先弹确认框）</span></div>
+      </div>
+      <div class="card"><h3>常见网络问题诊断与修复指南</h3>
+        <details><summary>网页打开慢 / 视频频繁转圈卡顿</summary><div class="dbody">
+          多为 <b>DNS 解析慢</b> 或 <b>DNS 被污染</b>。<br>· 先点上方「刷新 DNS 缓存」试试；<br>· 更有效：把 DNS 换成公共 DNS —— 阿里 223.5.5.5 / 腾讯 119.29.29.29（在 设置→网络→更改适配器选项→IPv4 属性 里修改）；<br>· 也可在「网络设置」快捷入口中打开系统网络面板操作。
+        </div></details>
+        <details><summary>玩游戏延迟高、跳 PING（卡顿）</summary><div class="dbody">
+          · 关闭正在后台下载/上传的软件（迅雷、网盘、Steam 下载）；<br>· WiFi 用户优先改用 <b>网线直连</b> 或切换到 5GHz 频段；<br>· 关闭路由器 QoS 限速或开启游戏加速；<br>· 在「进程」页结束高 CPU/高内存的后台进程。
+        </div></details>
+        <details><summary>WiFi 信号差、经常断连</summary><div class="dbody">
+          · 靠近路由器，减少墙体阻隔；<br>· 2.4GHz 干扰大，能连 5GHz 就连 5GHz；<br>· 更新网卡驱动（设备管理器→网络适配器→更新驱动）；<br>· 重启路由器（断电 30 秒再开）。
+        </div></details>
+        <details><summary>丢包严重 / 网络频繁中断</summary><div class="dbody">
+          · 先点「Ping 连通性诊断」看丢包率；<br>· 网线松动或水晶头氧化→重插或换线；<br>· 运行「重置 Winsock」和「重置 TCP/IP 协议栈」；<br>· 若只有某台设备丢包，多为驱动问题，更新驱动。
+        </div></details>
+        <details><summary>系统自带的一键网络诊断</summary><div class="dbody">
+          按 <span class="fix">Win + I → 网络和 Internet → 高级网络设置 → 网络重置</span>，或右键任务栏网络图标 → 网络和 Internet 设置 → 疑难解答，让 Windows 自动诊断修复。
+        </div></details>
+      </div>
+    </section>
+
+    <!-- ============ 进程 ============ -->
+    <section class="tab" id="tab-proc">
+      <div class="card">
+        <div class="searchbar">
+          <input id="procSearch" placeholder="搜索进程名 / PID…" oninput="renderProcs()">
+          <button class="btn ghost" onclick="loadProcs()">刷新</button>
+          <button class="btn danger small" onclick="killHighCpu()">一键结束高占用进程</button>
+          <span style="color:var(--muted);font-size:12px">共 <span id="procCount">0</span> 条 · 自动刷新</span>
+        </div>
+        <div class="tbl-wrap"><table><thead><tr><th>PID</th><th>进程名</th><th>用户</th><th>CPU %</th><th>内存</th><th style="width:80px">操作</th></tr></thead><tbody id="procTbody"><tr><td colspan="6" style="color:var(--dim);text-align:center">加载中…</td></tr></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ============ 启动项 ============ -->
+    <section class="tab" id="tab-startup">
+      <div class="card">
+        <div class="searchbar">
+          <input id="startupSearch" placeholder="搜索启动项…" oninput="renderStartup()">
+          <button class="btn ghost" onclick="loadStartup()">刷新</button>
+          <button class="btn" onclick="openSys('startup')">打开启动应用设置</button>
+          <span style="color:var(--muted);font-size:12px" id="startupCount"></span>
+        </div>
+        <div id="startupHeavy" style="margin-bottom:10px"></div>
+        <div class="tbl-wrap"><table><thead><tr><th>名称</th><th>影响</th><th>位置</th><th>命令 / 路径</th><th>状态</th><th style="width:150px">操作</th></tr></thead><tbody id="startupTbody"><tr><td colspan="6" style="color:var(--dim);text-align:center">加载中…</td></tr></tbody></table></div>
+        <p style="color:var(--dim);font-size:11.5px;margin-top:10px;line-height:1.7">影响等级按启动项软件特征粗估（仅供建议参考）。禁用/启用为可逆操作（命令备份在本软件私有键中）；「删除」为永久移除。HKLM（HKLM/HKLM32）项修改通常需要管理员权限，失败会提示。</p>
+      </div>
+    </section>
+
+    <!-- ============ 系统信息 ============ -->
+    <section class="tab" id="tab-sys">
+      <div class="card"><h3>本机系统信息 <span class="tag">真实读取</span></h3><div class="info-grid" id="sysGrid"></div></div>
+      <div class="card"><h3>系统快捷入口</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" onclick="openSys('control')">打开控制面板</button>
+          <button class="btn" onclick="openSys('explorer')">打开文件资源管理器</button>
+          <button class="btn" onclick="openSys('display')">显示设置</button>
+          <button class="btn" onclick="openSys('wallpaper')">壁纸设置</button>
+          <button class="btn" onclick="openSys('network')">网络设置</button>
+          <button class="btn" onclick="openSys('apps')">已安装应用</button>
+          <button class="btn" onclick="openSys('startup')">启动应用设置</button>
+        </div>
+      </div>
+      <div class="card"><h3>已安装软件 <span class="tag">注册表真实读取 · <span id="swCount">0</span> 个</span></h3>
+        <div class="searchbar"><input id="swSearch" placeholder="搜索软件名…" oninput="renderSoftware()"></div>
+        <div class="tbl-wrap" style="max-height:420px"><table><thead><tr><th>软件名称</th><th>版本</th><th>发行商</th></tr></thead><tbody id="swTbody"><tr><td colspan="3" style="color:var(--dim);text-align:center">加载中…</td></tr></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ============ 操作中心 ============ -->
+    <section class="tab" id="tab-ops">
+      <div class="op-grid">
+        <div class="op-card">
+          <h3><span class="ic" style="background:rgba(52,211,153,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M3 12h4l2-5 3 10 2-6 1.5 3H21"/></svg></span>内存清理</h3>
+          <p>对全部可访问进程执行工作集释放（EmptyWorkingSet），<b>真实增加可用内存</b>，并详细展示每个进程的释放量。不会删除数据。</p>
+          <button class="btn primary" onclick="cleanMemory()">立即清理并查看明细</button>
+          <div class="op-result" id="opMemClean"><span style="color:var(--dim)">尚未执行</span></div>
+        </div>
+        <div class="op-card">
+          <h3><span class="ic" style="background:rgba(79,156,254,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f9cfe" stroke-width="2"><path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor"/></svg></span>网络诊断与修复</h3>
+          <p>真实 Ping 网关/DNS/百度 判断连通性；真实下载测速；并提供 DNS 刷新、IP 重新获取、Winsock/TCP/IP 重置等一键修复（全部显式触发）。</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn primary" onclick="runNetDiag()">开始诊断</button>
+            <button class="btn" onclick="runSpeedTest()">下载测速</button>
+            <button class="btn ghost" onclick="switchTab('net')">前往网络页(接口/教程)</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn small" onclick="netFix('flushdns')">刷新DNS缓存</button>
+            <button class="btn small" onclick="netFix('renew')">释放重取IP</button>
+            <button class="btn small" onclick="netFix('winsock')">重置Winsock</button>
+            <button class="btn small" onclick="netFix('tcpip')">重置TCP/IP</button>
+          </div>
+          <div class="op-result" id="opNetDiag"><span style="color:var(--dim)">尚未执行</span></div>
+          <div class="op-result" id="opNetFix"><span style="color:var(--dim)">选择上方修复操作（会先弹确认框）</span></div>
+        </div>
+        <div class="op-card">
+          <h3><span class="ic" style="background:rgba(34,211,238,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></span>性能诊断</h3>
+          <p>综合 CPU、内存、磁盘、显卡、网络、运行时长等<b>真实采样数据</b>评分，给出针对性优化建议。</p>
+          <button class="btn primary" onclick="runPerfDiag()">立即诊断</button>
+          <div class="op-result" id="opPerf"><span style="color:var(--dim)">尚未执行</span></div>
+        </div>
+        <div class="op-card">
+          <h3><span class="ic" style="background:rgba(251,191,36,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></span>磁盘清理与分析</h3>
+          <p>真实扫描找大文件夹/大文件（删除进回收站），并提供临时文件、更新缓存、回收站等建议清理项一键清理。</p>
+          <button class="btn primary" onclick="goDiskTab()">前往磁盘分析与清理</button>
+          <div class="op-result" id="opDisk"><span style="color:var(--dim)">请前往「磁盘」标签页</span></div>
+        </div>
+        <div class="op-card">
+          <h3><span class="ic" style="background:rgba(251,113,133,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2"><path d="M12 5c-3 0-5 2-5 5 0 2.5 1.5 4.5 3 5.5V19h4v-3.5c1.5-1 3-3 3-5.5 0-3-2-5-5-5z"/><circle cx="12" cy="7" r="1.5"/></svg></span>进程管理</h3>
+          <p>一键结束 CPU 占用最高的进程（确认后执行，系统关键进程自动跳过），或前往进程页逐行查看/结束。</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" onclick="killHighCpu()">一键结束高占用进程</button>
+            <button class="btn ghost" onclick="switchTab('proc')">前往进程页</button>
+          </div>
+          <div class="op-result" id="opProc"><span style="color:var(--dim)">尚未执行</span></div>
+        </div>
+        <div class="op-card">
+          <h3><span class="ic" style="background:rgba(167,139,250,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="18" cy="17" r="2"/></svg></span>启动项管理</h3>
+          <p>查看/禁用/启用/删除开机启动项（禁用为可逆操作，命令已备份；删除为永久移除）。</p>
+          <button class="btn primary" onclick="switchTab('startup')">前往启动项管理</button>
+          <div class="op-result" id="opStartup"><span style="color:var(--dim)">请前往「启动项」标签页</span></div>
+        </div>
+        <div class="op-card" style="grid-column:1/-1">
+          <h3><span class="ic" style="background:rgba(148,163,184,.15)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6M7 17h4"/><path d="M16 15l2 2 3-3"/></svg></span>操作日志中心 <span class="tag">删除/清理/修复等显式操作可追溯</span></h3>
+          <p>记录本软件所有删除、清理、网络修复、结束进程等<b>显式操作</b>（时间、对象、大小、结果），全程可追溯。</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" onclick="loadOpLog()">刷新日志</button>
+            <button class="btn danger small" onclick="clearOpLog()">清空日志</button>
+          </div>
+          <div class="op-result" id="opLog" style="max-height:300px"><span style="color:var(--dim)">点击「刷新日志」查看操作记录</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="alertBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:1200;background:rgba(239,68,68,.93);color:#fff;padding:8px 16px;font-size:13px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.3)"></div>
+<div class="toast" id="toast"></div>
+<div class="modal-mask" id="modalMask" style="display:none">
+  <div class="modal">
+    <h3 id="modalTitle">确认操作</h3>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-btns">
+      <button class="btn ghost" id="modalCancel">取消</button>
+      <button class="btn danger" id="modalOk">确认执行</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 工具函数 ================= */
+const $ = id => document.getElementById(id);
+function fmtBytes(n){ if(n==null||isNaN(n)) return '--'; n=Number(n); const u=['B','KB','MB','GB','TB','PB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return n.toFixed(n>=100?0:n>=10?1:2)+' '+u[i]; }
+function fmtSpeed(n){ if(n==null||isNaN(n)) return '--'; n=Number(n); if(n>=1e6) return (n/1e6).toFixed(2)+' MB/s'; if(n>=1e3) return (n/1e3).toFixed(1)+' KB/s'; return n.toFixed(0)+' B/s'; }
+function fmtUptime(s){ s=Math.floor(s||0); const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); if(d>0) return d+'天 '+h+'小时'; return h+'小时 '+m+'分'; }
+function toast(msg,type){ const el=document.createElement('div'); el.className='tmsg '+(type||''); el.textContent=msg; $('toast').appendChild(el); setTimeout(()=>el.remove(),3400); }
+async function api(path,opts={}){ const timeout=opts.timeout||60000; const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),timeout); const {timeout:_t,...rest}=opts; try{ const r=await fetch(path,Object.assign({},rest,{signal:ctl.signal})); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); } finally{ clearTimeout(timer); } }
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* qp: 用于内联 onclick 的路径参数 —— 先 HTML 转义，再把反斜杠转义为 \\，避免 onclick JS 字符串把 \U \y 等当转义符吞掉反斜杠 */
+const qp = s => esc(s).replace(/\\/g, '\\\\');
+
+/* ================= 确认弹窗 ================= */
+function confirmAction(title, bodyHtml, okText){
+  return new Promise(res=>{
+    $('modalTitle').textContent=title;
+    $('modalBody').innerHTML=bodyHtml;
+    $('modalOk').textContent=okText||'确认执行';
+    $('modalMask').style.display='flex';
+    const close=v=>{ $('modalMask').style.display='none'; $('modalOk').onclick=null; $('modalCancel').onclick=null; res(v); };
+    $('modalOk').onclick=()=>close(true);
+    $('modalCancel').onclick=()=>close(false);
+  });
+}
+
+/* ================= 主题切换 ================= */
+function toggleTheme(){ const light=document.body.classList.toggle('light'); $('themeBtn').textContent=light?'☾':'☀'; localStorage.setItem('pcmon-theme',light?'light':'dark');
+  setTimeout(()=>Object.values(EC).forEach(c=>c.resize()),50); }
+if(localStorage.getItem('pcmon-theme')!=='dark'){ document.body.classList.add('light'); $('themeBtn').textContent='☾'; }
+
+/* ================= 页面切换 ================= */
+const TITLES={overview:'总览',cpu:'CPU 处理器',mem:'内存',disk:'磁盘',gpu:'显卡 GPU',net:'网络',proc:'进程',startup:'启动项',drivers:'驱动',sys:'系统信息',ops:'操作中心'};
+function switchTab(name){
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+name));
+  $('pageTitle').textContent=TITLES[name];
+  setTimeout(()=>Object.values(EC).forEach(c=>c.resize()),40);
+  if(name==='proc'){ loadProcs(); if(!procTimer) procTimer=setInterval(loadProcs,5000); }
+  if(name==='mem') loadMemProcs();
+  if(name==='cpu') loadCpuProcs();
+  if(name==='startup') loadStartup();
+  if(name==='sys'){ loadSysinfo(); loadSoftware(); }
+  if(name==='disk'){ loadDiskHealth(); loadCleanupSuggest(); }
+  if(name==='gpu'){ loadGpuApps(); }
+  if(name==='drivers') loadDrivers();
+}
+document.querySelectorAll('.nav-item').forEach(el=>{ el.onclick=()=>{ switchTab(el.dataset.tab); location.hash=el.dataset.tab; }; });
+window.addEventListener('hashchange',()=>{ const h=location.hash.replace('#',''); if(TITLES[h]) switchTab(h); });
+if(TITLES[location.hash.replace('#','')]) switchTab(location.hash.replace('#',''));
+function goDiskTab(){ switchTab('disk'); location.hash='disk'; }
+
+/* ================= ECharts 初始化 ================= */
+const axisStyle={axisLine:{lineStyle:{color:'#24354f'}},axisLabel:{color:'#7d8ba3',fontSize:10},splitLine:{lineStyle:{color:'#16233b'}}};
+let EC={};
+function mkChart(id){ const c=echarts.init($(id)); EC[id]=c; return c; }
+function gaugeOpt(name,val,color){ return {
+  series:[{type:'gauge',startAngle:210,endAngle:-30,min:0,max:100,radius:'92%',center:['50%','58%'],
+    progress:{show:true,width:11,itemStyle:{color}},axisLine:{lineStyle:{width:11,color:[[1,'#16233b']]}},
+    axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},pointer:{show:false},
+    anchor:{show:false},title:{show:false},
+    detail:{valueAnimation:true,offsetCenter:[0,'22%'],fontSize:26,fontWeight:700,fontFamily:'Consolas',color:color,formatter:v=>v.toFixed(1)+'%'},
+    data:[{value:val}]
+  }]}
+}
+function lineSeries(name,color){ return {name,type:'line',showSymbol:false,smooth:true,lineStyle:{width:2,color},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'44'},{offset:1,color:color+'00'}]}}} }
+function baseLine(colors){ return {tooltip:{trigger:'axis',backgroundColor:'#0e1727',borderColor:'#24354f',textStyle:{color:'#dbe6f7',fontSize:11}},grid:{left:46,right:12,top:26,bottom:24},legend:{show:false},xAxis:{type:'category',boundaryGap:false,data:[],...axisStyle},yAxis:{type:'value',...axisStyle},series:colors} }
+function fmtSpeedVal(v){ return fmtSpeed(v); }
+['ovCpu','ovMem','ovDisk','ovGpu'].forEach((id,i)=>mkChart(id).setOption(gaugeOpt('',0,['#22d3ee','#4f9cfe','#fbbf24','#a78bfa'][i])));
+mkChart('ovBatt').setOption(gaugeOpt('',0,'#34d399'));
+mkChart('cpuGauge').setOption(gaugeOpt('',0,'#22d3ee'));
+mkChart('memGauge').setOption(gaugeOpt('',0,'#4f9cfe'));
+mkChart('ovCpuLine').setOption(baseLine([lineSeries('cpu','#22d3ee')]));
+mkChart('ovMemLine').setOption(baseLine([lineSeries('mem','#4f9cfe')]));
+mkChart('ovNetLine').setOption(baseLine([lineSeries('down','#22d3ee'),lineSeries('up','#4f9cfe')]));
+mkChart('cpuLine').setOption(baseLine([lineSeries('cpu','#22d3ee')]));
+mkChart('memLine').setOption(baseLine([lineSeries('mem','#4f9cfe')]));
+mkChart('diskIoLine').setOption(baseLine([lineSeries('read','#34d399'),lineSeries('write','#fbbf24')]));
+mkChart('gpuLine').setOption(baseLine([lineSeries('gpu','#a78bfa')]));
+mkChart('netLine').setOption(baseLine([lineSeries('down','#22d3ee'),lineSeries('up','#4f9cfe')]));
+mkChart('gpuGauge').setOption(gaugeOpt('',0,'#a78bfa'));
+window.addEventListener('resize',()=>Object.values(EC).forEach(c=>c.resize()));
+
+/* ================= 数据缓冲 ================= */
+const HIST={t:[],cpu:[],mem:[],down:[],up:[],diskR:[],diskW:[],gpu:[]};
+function pushHist(m){ HIST.t.push(new Date().toLocaleTimeString('zh-CN',{hour12:false}));
+  HIST.cpu.push(m.cpu.percent); HIST.mem.push(m.mem.percent); HIST.down.push(m.io.net_down); HIST.up.push(m.io.net_up);
+  HIST.diskR.push(m.io.disk_read); HIST.diskW.push(m.io.disk_write);
+  const g=m.gpu.find(x=>x.vendor==='NVIDIA'&&x.util!=null); HIST.gpu.push(g?g.util:0);
+  if(HIST.t.length>120){ ['t','cpu','mem','down','up','diskR','diskW','gpu'].forEach(k=>HIST[k].shift()); }
+}
+
+/* ================= 主轮询 ================= */
+let pollErr=0;
+async function tick(){
+  try{
+    const m=await api('/api/metrics');
+    pollErr=0; $('conn').textContent='数据采集已连接'; document.querySelector('.pulse').style.background='var(--green)';
+    $('lastRefresh').textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+    pushHist(m);
+    renderOverview(m); renderCpu(m); renderMem(m); renderDisk(m); renderGpu(m); renderNet(m);
+    checkAlerts(m);
+    $('footUptime').textContent='运行时间 '+fmtUptime(m.uptime_sec);
+  }catch(e){ pollErr++; $('conn').textContent='连接中断，重试中…'; document.querySelector('.pulse').style.background='var(--red)'; if(pollErr>3) toast('与本地服务连接中断，请确认服务仍在运行','err'); }
+}
+setInterval(tick,1500);
+
+/* ================= 异常告警（阈值持续触发顶部横幅） ================= */
+let ALERT_STREAK={mem:0,disk:0,gpu:0};
+function checkAlerts(m){
+  const warns=[];
+  if(m.mem&&m.mem.percent>90){ ALERT_STREAK.mem++; if(ALERT_STREAK.mem>=3) warns.push('内存占用 '+m.mem.percent.toFixed(0)+'%（可用紧张），建议运行「内存清理」'); } else ALERT_STREAK.mem=0;
+  if(m.disk&&m.disk.length){ const maxd=Math.max(...m.disk.map(d=>d.percent||0)); if(maxd>90){ ALERT_STREAK.disk++; if(ALERT_STREAK.disk>=3) warns.push('磁盘占用 '+maxd.toFixed(0)+'%，建议清理空间'); } else ALERT_STREAK.disk=0; }
+  const g=(m.gpu||[]).find(x=>x.temp!=null); if(g&&g.temp>85){ ALERT_STREAK.gpu++; if(ALERT_STREAK.gpu>=3) warns.push('显卡温度 '+g.temp.toFixed(0)+'℃，注意散热'); } else ALERT_STREAK.gpu=0;
+  const bar=$('alertBar');
+  if(warns.length){
+    bar.style.display='block';
+    bar.innerHTML='⚠ '+warns.join('　｜　')+' <a href="javascript:void(0)" onclick="goTab(\'ops\')" style="color:#fff;font-weight:700">去处理</a> <button class="btn small" style="margin-left:8px;background:transparent;border:1px solid #fff;color:#fff" onclick="document.getElementById(\'alertBar\').style.display=\'none\'">关闭</button>';
+  } else bar.style.display='none';
+}
+
+/* ================= 总览 ================= */
+function renderOverview(m){
+  const c=m.cpu.percent, me=m.mem.percent, d=m.disk.find(x=>x.mount==='C:\\'||x.mount.endsWith('C:\\'))||m.disk[0]||{percent:0};
+  const g=m.gpu.find(x=>x.vendor==='NVIDIA'&&x.util!=null)||{};
+  EC.ovCpu.setOption({series:[{data:[{value:c}]}]});
+  EC.ovMem.setOption({series:[{data:[{value:me}]}]});
+  EC.ovDisk.setOption({series:[{data:[{value:d.percent}]}]});
+  EC.ovGpu.setOption({series:[{data:[{value:g.util??0}]}]});
+  EC.ovCpuLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.cpu}]});
+  EC.ovMemLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.mem}]});
+  EC.ovNetLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.down},{data:HIST.up}]});
+  $('sCpu').textContent=c.toFixed(1)+'%'; $('sMem').textContent=me.toFixed(1)+'%'; $('sGpu').textContent=(g.util!=null?g.util.toFixed(0):'0')+'%'; $('sDown').textContent=fmtSpeed(m.io.net_down);
+  $('ovAvail').textContent=fmtBytes(m.mem.available); $('ovMemTotal').textContent=fmtBytes(m.mem.total);
+  $('ovDiskFree').textContent=fmtBytes(d.free); $('ovDiskUsed').textContent=fmtBytes(d.used);
+  $('ovDown').textContent=fmtSpeed(m.io.net_down); $('ovUp').textContent=fmtSpeed(m.io.net_up);
+  $('ovGpuTemp').textContent=g.temp!=null?g.temp.toFixed(0):'--';
+  $('ovVram').textContent=(g.mem_used!=null&&g.mem_total)?g.mem_used.toFixed(0)+'MB / '+(g.mem_total/1024).toFixed(1)+'GB':'--';
+  $('ovProcs').textContent=m.proc_count; $('ovUptime').textContent=fmtUptime(m.uptime_sec);
+  const bat=m.battery;
+  if(bat&&bat.percent!=null){
+    EC.ovBatt.setOption({series:[{data:[{value:bat.percent}],progress:{itemStyle:{color:bat.percent<=20?'#f87171':(bat.percent<=50?'#fbbf24':'#34d399')}},detail:{color:bat.percent<=20?'#f87171':(bat.percent<=50?'#fbbf24':'#34d399')}}]});
+    $('ovBattTag').textContent=bat.plugged?'充电中':'电池供电';
+  } else { EC.ovBatt.setOption({series:[{data:[{value:0}]}]}); $('ovBattTag').textContent='无电池'; }
+}
+
+/* ================= 页面切换辅助 ================= */
+function goTab(name){ if(TITLES[name]){ switchTab(name); location.hash=name; } }
+
+/* ================= 健康状态（评级/评分/建议/驱动摘要） ================= */
+function healthColor(score){ return score>=85?'#34d399':(score>=70?'#4f9cfe':(score>=55?'#fbbf24':'#f87171')); }
+function gaugeHealthOpt(score,color){ return {
+  series:[{type:'gauge',startAngle:210,endAngle:-30,min:0,max:100,radius:'95%',center:['50%','56%'],
+    progress:{show:true,width:11,itemStyle:{color}},axisLine:{lineStyle:{width:11,color:[[1,'rgba(128,140,160,.18)']]}},
+    axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},pointer:{show:false},anchor:{show:false},title:{show:false},
+    detail:{valueAnimation:true,offsetCenter:[0,'14%'],fontSize:36,fontWeight:700,fontFamily:'Consolas',color,formatter:'{value}'},
+    data:[{value:score}]}]};
+}
+let healthTimer=null;
+const ITEM_TABS={cpu:'cpu',mem:'mem',disk:'disk',gpu:'gpu',net:'net',drv:'drivers'};
+async function loadHealth(){
+  try{
+    const h=await api('/api/health');
+    const col=healthColor(h.score);
+    if(!EC.ovHealthGauge) mkChart('ovHealthGauge').setOption(gaugeHealthOpt(h.score,col));
+    else EC.ovHealthGauge.setOption({series:[{data:[{value:h.score}],progress:{itemStyle:{color:col}},detail:{color:col}}]});
+    const gradeCls=h.score>=85?'green':(h.score>=70?'cyan':(h.score>=55?'amber':'red'));
+    $('ovHealthGrade').textContent='综合 '+h.score+' 分 · '+h.grade;
+    $('ovHealthGrade').className='pill '+gradeCls;
+    $('ovHealthItems').innerHTML=(h.items||[]).map(i=>{
+      const c=i.level==='ok'?'var(--green)':(i.level==='warn'?'var(--amber)':'var(--red)');
+      const tab=ITEM_TABS[i.key];
+      return `<div ${tab?`onclick="goTab('${tab}')" title="点击前往 ${TITLES[tab]}"`:''} style="border:1px solid var(--border);border-radius:9px;padding:9px 11px;background:var(--card2);${tab?'cursor:pointer;transition:.15s':''}" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor=''">
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--muted)">${esc(i.name)}</span><b style="color:${c}">${esc(i.status)}</b></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:3px">${esc(i.desc)}</div>
+        <div style="height:5px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.max(0,Math.min(100,i.score))}%;background:${c};transition:width .5s"></div></div>
+      </div>`;
+    }).join('');
+    $('ovSuggestions').innerHTML=(h.tips||[]).map(t=>{
+      const c=t.level==='ok'?'var(--green)':(t.level==='warn'?'var(--amber)':'var(--red)');
+      const nav=t.action&&TITLES[t.action]?`<span style="margin-left:6px;color:var(--cyan);cursor:pointer;font-size:11px;white-space:nowrap" onclick="goTab('${t.action}')">去处理 →</span>`:'';
+      return `<li style="padding:7px 10px;margin:4px 0;background:var(--card2);border-left:3px solid ${c};border-radius:6px;font-size:12.5px;line-height:1.5">${esc(t.text)}${nav}</li>`;
+    }).join('')||'<li style="color:var(--dim);font-size:12px">暂无</li>';
+    const dr=h.drivers||{};
+    const dcell=(k,v,c)=>`<div style="border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;background:var(--card2)"><div style="font-size:18px;font-family:var(--mono);font-weight:700;color:${c}">${v==null?'--':v}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${k}</div></div>`;
+    $('ovDrivers').innerHTML=dcell('驱动总数',dr.total,'var(--txt)')+dcell('正常',dr.ok,'var(--green)')+dcell('异常',dr.error,dr.error>0?'var(--red)':'var(--muted)')+dcell('未知/降级',(dr.unknown||0)+(dr.degraded||0),'var(--amber)');
+  }catch(e){}
+}
+loadHealth();
+if(!healthTimer) healthTimer=setInterval(loadHealth,5000);
+
+/* ================= 一键智能体检 ================= */
+const ITEM_TAB_NAMES={cpu:'cpu',mem:'mem',disk:'disk',gpu:'gpu',net:'net',drv:'drivers'};
+function openReportModal(title, bodyHtml){
+  $('modalTitle').textContent=title;
+  $('modalBody').innerHTML=bodyHtml;
+  $('modalOk').textContent='关闭';
+  $('modalCancel').style.display='none';
+  $('modalMask').style.display='flex';
+  $('modalOk').onclick=()=>{ $('modalMask').style.display='none'; $('modalOk').onclick=null; $('modalCancel').style.display=''; };
+}
+function checkupReportHtml(r){
+  const col=r.score>=85?'var(--green)':(r.score>=70?'var(--blue)':(r.score>=55?'var(--amber)':'var(--red)'));
+  const itemHtml=(r.items||[]).map(i=>{ const c=i.level==='ok'?'var(--green)':(i.level==='warn'?'var(--amber)':'var(--red)');
+    const tab=ITEM_TAB_NAMES[i.key];
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px dashed var(--border);font-size:12.5px"><span>${esc(i.name)}</span><span style="display:flex;align-items:center;gap:8px"><b style="color:${c}">${esc(i.status)}</b><span style="color:var(--dim);font-size:11px">${esc(i.desc)}</span>${tab?`<a href="javascript:void(0)" onclick="goTab('${tab}')">去处理</a>`:''}</span></div>`; }).join('');
+  const tips=(r.tips||[]).map(t=>`<div style="padding:5px 8px;margin:4px 0;background:var(--card2);border-left:3px solid ${t.level==='ok'?'var(--green)':(t.level==='warn'?'var(--amber)':'var(--red)')};border-radius:6px;font-size:12px">${esc(t.text)}</div>`).join('')||'<div style="color:var(--dim)">无</div>';
+  const hv=(r.startup_heavy||[]).map(s=>`<div style="font-size:11.5px;padding:3px 0;border-bottom:1px dashed var(--border)">· ${esc(s.name)} <span style="color:var(--amber)">(影响高)</span></div>`).join('')||'<div style="color:var(--green);font-size:11.5px">未发现高影响启动项</div>';
+  const ts=new Date(r.ts*1000).toLocaleString('zh-CN');
+  return `<div style="text-align:center;margin-bottom:6px">
+    <div style="font-size:38px;font-weight:800;font-family:var(--mono);color:${col}">${r.score}</div>
+    <div><span class="pill" style="color:${col};border:1px solid ${col}">等级：${esc(r.grade)}</span></div>
+    <div style="color:var(--dim);font-size:11px;margin-top:4px">体检时间 ${esc(ts)}</div></div>
+    <div style="margin:8px 0 4px;font-size:13px;font-weight:700;color:var(--cyan)">逐项评级（点击可跳转处理）</div>${itemHtml}
+    <div style="margin:10px 0 4px;font-size:13px;font-weight:700;color:var(--cyan)">处理建议</div>${tips}
+    <div style="margin:10px 0 4px;font-size:13px;font-weight:700;color:var(--cyan)">启动项影响 <span style="color:var(--muted);font-size:11px;font-weight:400">共 ${r.startup_total||0} 项 · 高影响 ${r.startup_heavy_total||0} 项（→ 启动项页可禁用）</span></div>${hv}`;
+}
+async function openCheckup(){
+  $('modalBody').innerHTML='<div style="text-align:center;color:var(--dim);padding:20px">正在执行全面体检（读取 CPU/内存/磁盘/网络/驱动/启动项）…</div>';
+  $('modalTitle').textContent='智能体检';
+  $('modalOk').textContent='关闭'; $('modalCancel').style.display='none'; $('modalMask').style.display='flex';
+  $('modalOk').onclick=()=>{ $('modalMask').style.display='none'; $('modalOk').onclick=null; $('modalCancel').style.display=''; };
+  try{
+    const r=await api('/api/checkup',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    $('modalBody').innerHTML=checkupReportHtml(r);
+    loadCheckupHist();
+  }catch(e){ $('modalBody').innerHTML='<div style="color:var(--red)">体检失败，请重试</div>'; }
+}
+async function loadCheckupHist(){
+  try{ const h=await api('/api/checkup/history');
+    const sel=$('checkupHist'); sel.style.display=''; sel.innerHTML='<option value="">历史体检…</option>'+h.list.map((r,i)=>`<option value="${r.ts}">${new Date(r.ts*1000).toLocaleString('zh-CN')} · ${r.score}分 · ${esc(r.grade)}</option>`).join('');
+  }catch(e){}
+}
+async function viewCheckupHist(ts){
+  if(!ts) return;
+  try{ const h=await api('/api/checkup/history'); const r=h.list.find(x=>String(x.ts)===String(ts));
+    if(r) $('modalBody').innerHTML=checkupReportHtml(r);
+  }catch(e){}
+}
+
+/* ================= 驱动 ================= */
+let DRIVERS=[];
+async function loadDrivers(){
+  try{
+    const d=await api('/api/drivers');
+    DRIVERS=d.items||[];
+    $('drvTotal').textContent=d.total; $('drvOk').textContent=d.ok; $('drvErr').textContent=d.error;
+    $('drvUnk').textContent=(d.unknown||0)+(d.degraded||0);
+    $('drvTs').textContent=d.ts?('更新于 '+new Date(d.ts*1000).toLocaleTimeString('zh-CN',{hour12:false})):'';
+    renderDrivers();
+  }catch(e){ $('drvTbody').innerHTML='<tr><td colspan="5" style="color:var(--dim)">驱动读取失败</td></tr>'; }
+}
+function renderDrivers(){
+  const q=($('drvSearch')&&$('drvSearch').value||'').trim().toLowerCase();
+  const rows=DRIVERS.filter(x=>!q||x.name.toLowerCase().includes(q)||x.class.toLowerCase().includes(q));
+  const badge=s=>s==='OK'?'<span class="pill green">正常</span>':(s==='Error'?'<span class="pill red">异常</span>':(s==='Degraded'?'<span class="pill amber">降级</span>':'<span class="pill amber">未知</span>'));
+  $('drvTbody').innerHTML=rows.map(x=>`<tr><td>${badge(x.status)}</td><td style="font-family:inherit">${esc(x.name)}</td><td>${esc(x.class)}</td><td>${x.error>0?('<b style="color:var(--red)">'+x.error+'</b>'):'0'}</td><td style="font-size:11px;color:var(--dim)">${esc(x.instance)}</td></tr>`).join('')
+    ||`<tr><td colspan="5" style="color:var(--dim)">${q?'未找到匹配驱动':'暂无可显示驱动'}</td></tr>`;
+}
+
+/* ================= CPU ================= */
+let SYS={};
+async function ensureSys(){ if(Object.keys(SYS).length) return; try{ SYS=await api('/api/sysinfo'); }catch(e){} }
+ensureSys();
+function renderCpu(m){
+  const c=m.cpu;
+  EC.cpuGauge.setOption({series:[{data:[{value:c.percent}]}]});
+  EC.cpuLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.cpu}]});
+  $('cpuFreq').textContent=c.freq_mhz?c.freq_mhz.toFixed(0)+' MHz':'--';
+  $('cpuLogical').textContent=c.logical+' 线程'; $('cpuPhysical').textContent=c.physical+' 核';
+  $('cpuModel').textContent=SYS.cpu_model||'--';
+  const arch=(navigator.userAgent.includes('WOW64')||navigator.userAgent.includes('Win64'))?'x64':'--';
+  $('cpuArch').textContent=arch;
+  let html=''; (c.per_core||[]).forEach((v,i)=>{ const cls=v>85?'danger':v>65?'warn':''; html+=`<div class="bar"><span class="bl">核心 ${i}</span><div class="bt"><div class="bf ${cls}" style="width:${v}%"></div></div><span class="bv">${v.toFixed(0)}%</span></div>`; });
+  $('cpuCores').innerHTML=html;
+}
+let cpuProcTimer=null;
+async function loadCpuProcs(){ try{ const p=await api('/api/processes?top=20');
+  $('cpuProcTop').innerHTML=p.map(x=>procRow(x)).join('')||'<tr><td colspan="6" style="color:var(--dim)">无数据</td></tr>';
+  if(!cpuProcTimer) cpuProcTimer=setInterval(async()=>{ try{ const p=await api('/api/processes?top=20'); $('cpuProcTop').innerHTML=p.map(x=>procRow(x)).join(''); }catch(e){} },5000);
+}catch(e){} }
+
+/* ================= 内存 ================= */
+function renderMem(m){
+  const me=m.mem;
+  EC.memGauge.setOption({series:[{data:[{value:me.percent}]}]});
+  EC.memLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.mem}]});
+  $('memTotal').textContent=fmtBytes(me.total); $('memUsed').textContent=fmtBytes(me.used);
+  $('memAvail').textContent=fmtBytes(me.available); $('memSwap').textContent=me.swap_total?fmtBytes(me.swap_used)+' / '+fmtBytes(me.swap_total):'无';
+}
+let MEMPROCS=[];
+async function loadMemProcs(){ try{ $('memProcTbody').innerHTML='<tr><td colspan="6" style="color:var(--dim);text-align:center">加载中…</td></tr>';
+  MEMPROCS=await api('/api/processes'); MEMPROCS.sort((a,b)=>b.mem-a.mem); renderMemProcs(); }catch(e){ $('memProcTbody').innerHTML='<tr><td colspan="6" style="color:var(--dim)">加载失败</td></tr>'; } }
+function renderMemProcs(){ const q=$('memProcSearch').value.trim().toLowerCase();
+  const rows=MEMPROCS.filter(p=>!q||p.name.toLowerCase().includes(q)||String(p.pid).includes(q));
+  $('memProcCount').textContent='共 '+MEMPROCS.length+' 个进程';
+  $('memProcTbody').innerHTML=rows.map(x=>procRow(x)).join('')||'<tr><td colspan="6" style="color:var(--dim)">无结果</td></tr>';
+}
+
+/* ================= 进程行 + 结束进程 ================= */
+function procRow(p){ const cpuCls=p.cpu>40?'red':p.cpu>15?'amber':'cyan';
+  return `<tr><td>${p.pid}</td><td style="font-family:inherit">${esc(p.name)}</td><td style="font-family:inherit">${esc(p.user||'--')}</td><td><span class="pill ${cpuCls}">${p.cpu.toFixed(1)}%</span></td><td>${fmtBytes(p.mem)}</td><td><button class="btn danger small" onclick="killProc(${p.pid},'${esc(p.name)}')">结束</button></td></tr>`; }
+async function killProc(pid,name){
+  const ok=await confirmAction('结束进程',`确定要结束进程 <b>${esc(name)}</b>（PID ${pid}）吗？<br>进程会立即终止，未保存的数据可能丢失。`,`结束进程`);
+  if(!ok) return;
+  try{ const r=await api('/api/process/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid})});
+    if(r.ok){ toast('已结束进程 '+name,'ok'); } else { toast(r.msg||'结束失败','err'); }
+    if(document.querySelector('.nav-item[data-tab="proc"]').classList.contains('active')) loadProcs();
+    if(document.querySelector('.nav-item[data-tab="mem"]').classList.contains('active')) loadMemProcs();
+    if(document.querySelector('.nav-item[data-tab="gpu"]').classList.contains('active')) loadGpuApps();
+  }catch(e){ toast('操作失败','err'); }
+}
+async function killHighCpu(){
+  const p=await api('/api/processes');
+  const cands=(p||[]).filter(x=>x.cpu>5 && !['System Idle Process','System'].includes(x.name)).slice(0,10);
+  if(!cands.length){ toast('当前没有高占用进程(>5%)','ok'); return; }
+  const html='将按 <b>CPU 占用从高到低</b> 结束以下候选进程（系统关键进程自动跳过，未保存数据可能丢失）：<br>'+cands.map(t=>`· <b>${esc(t.name)}</b> (PID ${t.pid}) CPU <span style="color:var(--amber)">${t.cpu.toFixed(1)}%</span> · 内存 ${fmtBytes(t.mem)}`).join('<br>');
+  const ok=await confirmAction('一键结束高占用进程',html,`结束 ${cands.length} 个进程`);
+  if(!ok) return;
+  let n=0; const fail=[];
+  for(const t of cands){ try{ const r=await api('/api/process/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid:t.pid})}); if(r.ok) n++; else if(r.msg) fail.push(esc(t.name)+'('+esc(r.msg)+')'); }catch(e){} }
+  toast(`已结束 ${n} 个进程${fail.length?'，跳过：'+fail.slice(0,3).join('、'):''}`,'ok'); loadProcs();
+}
+
+/* ================= 磁盘 ================= */
+function renderDisk(m){
+  let html=''; (m.disk||[]).forEach(d=>{ const cls=d.percent>90?'danger':d.percent>70?'warn':''; const drive=d.device.replace('\\','');
+    html+=`<div class="bar"><span class="bl">${drive}</span><div class="bt"><div class="bf ${cls}" style="width:${d.percent}%"></div></div><span class="bv">${d.percent.toFixed(1)}%</span><span style="width:88px;text-align:right;font-family:var(--mono);color:var(--muted);font-size:11px">剩 ${fmtBytes(d.free)}</span></div>`; });
+  $('diskParts').innerHTML=html;
+  $('diskRead').textContent=fmtSpeed(m.io.disk_read); $('diskWrite').textContent=fmtSpeed(m.io.disk_write);
+  EC.diskIoLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.diskR},{data:HIST.diskW}]});
+}
+async function loadDiskHealth(){ try{ const s=await api('/api/sysinfo');
+  const disks=s.disks||[]; if(!disks.length){ $('diskHealth').innerHTML='<div class="empty">未读取到物理磁盘</div>'; return; }
+  $('diskHealth').className='';
+  $('diskHealth').innerHTML='<div class="grid g3">'+disks.map(d=>`<div class="info-item"><div class="k">${esc(d.Name||'磁盘')}</div><div class="v" style="color:${String(d.Health)==='Healthy'?'var(--green)':'var(--red)'}">${esc(d.Health||'未知')}</div><div style="color:var(--muted);font-size:11px;margin-top:4px">${d.Media||''} · ${d.Size?fmtBytes(d.Size):''}</div></div>`).join('')+'</div>';
+ }catch(e){ $('diskHealth').innerHTML='<div class="empty">读取失败</div>'; } }
+
+/* ---- 建议清理 ---- */
+let CLEANUP=[];
+function renderCleanupSel(){ const n=CLEANUP.filter(c=>c._sel).length; const b=$('cleanupBatchBtn'); if(b){ b.disabled=n===0; b.textContent='清理选中 ('+n+')'; } }
+function toggleCleanupSel(idx){ CLEANUP[idx]._sel=!CLEANUP[idx]._sel; renderCleanupSel(); }
+async function loadCleanupSuggest(){ try{ CLEANUP=await api('/api/cleanup/suggest');
+  CLEANUP.forEach(c=>{ if(c._sel===undefined) c._sel=false; });
+  $('cleanupSuggest').innerHTML='<div class="tbl-wrap"><table><thead><tr><th style="width:34px"></th><th>清理项</th><th>路径</th><th>占用</th><th>说明</th><th style="width:200px">操作</th></tr></thead><tbody>'+CLEANUP.map((c,idx)=>`
+    <tr><td><input type="checkbox" onchange="toggleCleanupSel(${idx})"></td>
+    <td style="font-family:inherit;font-weight:600">${esc(c.name)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.path)}">${esc(c.path)}</td><td>${fmtBytes(c.size)}</td><td style="font-family:inherit;color:var(--muted)">${esc(c.note)}</td><td><button class="btn small" onclick="openPath('${qp(c.path)}')">打开目录</button> <button class="btn small ${c.safe?'':'danger'}" onclick="doCleanup('${esc(c.name)}','${qp(c.path)}',${c.safe?'true':'false'})">清理</button></td></tr>`).join('')+'</tbody></table></div>';
+  renderCleanupSel();
+ }catch(e){ $('cleanupSuggest').innerHTML='<div class="empty">统计失败</div>'; } }
+async function doCleanup(name,path,safe){
+  const ok=await confirmAction('执行清理',`确定清理 <b>${esc(name)}</b> 吗？<br>路径：${esc(path)}<br><span style="color:var(--amber)">${safe?'临时文件类，清理后一般可重建':'⚠ 此操作清空后不可恢复，请确认'}，需要你显式确认后才会执行。</span>`,`确认清理`);
+  if(!ok) return;
+  try{ const r=await api('/api/cleanup/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,mode:'empty'})});
+    if(r.ok) toast(`已清理 ${esc(name)}，释放 ${fmtBytes(r.freed)} (${r.files} 个文件)`,'ok'); else toast(r.msg||'清理失败','err');
+    loadCleanupSuggest();
+  }catch(e){ toast('清理失败','err'); }
+}
+async function batchCleanup(){
+  const sel=CLEANUP.filter(c=>c._sel);
+  if(!sel.length){ toast('请先勾选要清理的项','err'); return; }
+  const html='将一次性清理以下 <b>'+sel.length+'</b> 项：<br>'+sel.map(c=>`· <b>${esc(c.name)}</b>（${fmtBytes(c.size)}）${c.safe?'':' <span style="color:var(--amber)">⚠ 清空后不可恢复</span>'}`).join('<br>');
+  const ok=await confirmAction('批量清理',html,`确认清理 ${sel.length} 项`);
+  if(!ok) return;
+  let done=0,freed=0;
+  for(const c of sel){ try{ const r=await api('/api/cleanup/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:c.path,mode:'empty'})}); if(r.ok){ done++; freed+=(r.freed||0); } }catch(e){} }
+  toast(`已清理 ${done}/${sel.length} 项，共释放 ${fmtBytes(freed)}`,'ok');
+  loadCleanupSuggest();
+}
+
+/* ---- 磁盘占用地图 ---- */
+function initTdChart(){ const pie={tooltip:{trigger:'item',formatter:p=>`${esc(p.name)}<br>${fmtBytes(p.value)} (${p.percent}%)`},legend:{type:'scroll',orient:'vertical',right:0,top:10,bottom:10,textStyle:{color:'var(--muted)',fontSize:10}},series:[{type:'pie',radius:['38%','70%'],center:['38%','52%'],avoidLabelOverlap:true,itemStyle:{borderRadius:4,borderColor:'transparent'},label:{show:false},data:[]}]};
+  mkChart('tdPie').setOption(pie);
+}
+const TD_COLORS=['#22d3ee','#4f9cfe','#a78bfa','#f472b6','#fbbf24','#34d399','#60a5fa','#fb7185','#facc15','#2dd4bf','#c084fc','#94a3b8'];
+async function loadTopDirs(path){
+  path=path||'D:\\';
+  $('tdState').textContent='正在统计占用…（首次稍慢）';
+  try{
+    const r=await api('/api/disk/topdirs?path='+encodeURIComponent(path),{timeout:120000});
+    renderTopDirs(r);
+  }catch(e){ $('tdState').textContent='统计失败或超时'; }
+}
+function renderTopDirs(r){
+  $('tdState').textContent='目录占用 '+fmtBytes(r.total)+(r.cached?'（缓存）':'');
+  const segs=r.path.replace(/\\$/,'').split('\\').filter(Boolean);
+  const crumbs=segs.map((s,i)=>{ const p=segs.slice(0,i+1).join('\\')+'\\';
+    return `<a href="javascript:void(0)" onclick="loadTopDirs('${qp(p)}')">${esc(i===0?s+'\\':s)}</a>`; }).join('<span style="color:var(--dim)"> / </span>');
+  $('tdCrumb').innerHTML='📁 '+crumbs+' <span style="color:var(--dim)">｜共 '+fmtBytes(r.total)+'</span>';
+  const top=r.items.slice(0,12), other=r.items.slice(12).reduce((a,x)=>a+(x.size||0),0);
+  const pieData=top.map((x,i)=>({name:x.name,value:x.size,itemStyle:{color:TD_COLORS[i%12]}}));
+  if(other>0) pieData.push({name:'其他',value:other,itemStyle:{color:'#475569'}});
+  EC.tdPie.setOption({series:[{data:pieData}]});
+  $('tdTbody').innerHTML=r.items.slice(0,80).map(x=>{
+    const pct=r.total?Math.max(1,Math.min(100,x.size/r.total*100)):0;
+    return `<tr><td style="font-family:inherit;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.path)}">${x.is_dir?'📁':'📄'} ${esc(x.name)}</td>
+    <td>${x.is_dir?'目录':'文件'}</td><td>${fmtBytes(x.size)}</td>
+    <td><div style="height:6px;background:var(--border);border-radius:3px;width:70px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${x.is_dir?'var(--cyan)':'var(--blue)'}"></div></div></td>
+    <td>${x.is_dir?`<button class="btn small" onclick="loadTopDirs('${qp(x.path)}')">钻取</button> `:''}<button class="btn small ghost" onclick="openPath('${qp(x.path)}')">打开目录</button></td></tr>`;
+  }).join('')||'<tr><td colspan="5" style="color:var(--dim)">无内容</td></tr>';
+}
+initTdChart();
+loadTopDirs('D:\\');
+
+/* ---- 磁盘分析 ---- */
+function fillScanPaths(){ ['C:\\','D:\\'].forEach(p=>{ const o=document.createElement('option'); o.value=p; o.textContent=p+' 盘'; if(p==='C:\\')o.selected=true; $('scanPath').appendChild(o); }); }
+fillScanPaths();
+let scanTimer=null;
+pollScan();
+async function runDiskAnalyze(){
+  const path=$('scanPath').value, depth=$('scanDepth').value;
+  $('scanBtn').disabled=true; $('scanState').textContent='正在启动扫描…';
+  try{ await api('/api/disk/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,depth:Number(depth)})});
+    toast('磁盘分析已启动，正在扫描 '+path,'ok'); pollScan();
+  }catch(e){ $('scanState').textContent='启动失败'; $('scanBtn').disabled=false; }
+}
+function pollScan(){ clearInterval(scanTimer);
+  scanTimer=setInterval(async()=>{ try{
+    const s=await api('/api/disk/scan/status');
+    $('scanState').textContent=s.running?`扫描中… 已统计 ${s.scanned||0} 个文件`:`${s.progress||''}`;
+    $('scanFolders').innerHTML=(s.folders||[]).map(f=>`<tr><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.path)}">${esc(f.path)}</td><td>${fmtBytes(f.size)}</td><td style="width:120px"><button class="btn small" onclick="openPath('${qp(f.path)}')">打开目录</button></td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--dim)">暂无</td></tr>';
+    $('scanFiles').innerHTML=(s.files||[]).filter(f=>f.size>=50*1024*1024).map(f=>`<tr><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.path)}">${esc(f.path)}</td><td>${fmtBytes(f.size)}</td><td style="width:200px"><button class="btn small" onclick="openPath('${qp(f.path)}')">打开目录</button> ${isProtected(f.path)?'<span style="color:var(--amber);font-size:11px">系统保护</span>':`<button class="btn danger small" onclick="delPath('${qp(f.path)}',false)">删除</button>`}</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--dim)">暂无 ≥50MB 文件</td></tr>';
+    if(!s.running){ clearInterval(scanTimer); $('scanBtn').disabled=false; if(s.done) toast('磁盘分析完成','ok'); }
+  }catch(e){} },1500);
+}
+
+/* ---- 专项清理（微信/视频/压缩包/安装包） ---- */
+function fillSpecPaths(){ ['C:\\','D:\\'].forEach(p=>{ const o=document.createElement('option'); o.value=p; o.textContent=p+' 盘'; if(p==='C:\\')o.selected=true; $('specPath').appendChild(o); }); }
+fillSpecPaths();
+let specTimer=null;
+function specPoll(){ clearInterval(specTimer);
+  specTimer=setInterval(async()=>{ try{
+    const s=await api('/api/spec/scan/status');
+    if(s.running||s.done){ $('specState').textContent=s.progress||''; if(s.done){ renderSpec(s); clearInterval(specTimer); } }
+    else { clearInterval(specTimer); }
+  }catch(e){} },1500);
+}
+specPoll();
+let lastSpec=null;  // 最近一次专项扫描，用于删除后自动刷新
+async function wechatScan(){
+  const ok=await confirmAction('微信专清','将自动探测微信数据目录，统计聊天记录/文件/缓存/临时等各类占用。<br>仅<b>缓存</b>与<b>临时</b>可一键清理（缓存可重建），聊天记录等<b>仅查看、不提供删除</b>。','开始扫描');
+  if(!ok) return;
+  try{ const r=await api('/api/wechat/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    if(r.ok){ lastSpec={kind:'wechat'}; $('specWechat').innerHTML=''; $('specResult').innerHTML=''; $('specState').textContent='微信扫描中…'; specPoll(); }
+    else $('specState').textContent=r.msg||'启动失败';
+  }catch(e){ toast('启动失败','err'); }
+}
+async function typeScan(ftype){
+  const path=$('specPath').value;
+  const labels={video:'视频',archive:'压缩包',installer:'安装包'};
+  const ok=await confirmAction(labels[ftype]+'专清',`将在 <b>${esc(path)}</b> 全盘（较深扫描）查找大${labels[ftype]}文件。<br>找到后每行可打开目录或删除（进回收站），全部需你显式操作。`,`开始扫描`);
+  if(!ok) return;
+  try{ const r=await api('/api/type/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:ftype,path})});
+    if(r.ok){ lastSpec={kind:ftype,path}; $('specResult').innerHTML=''; $('specWechat').innerHTML=''; $('specState').textContent=labels[ftype]+'扫描中…'; specPoll(); }
+    else toast(r.msg||'启动失败','err');
+  }catch(e){ toast('启动失败','err'); }
+}
+async function _specRescan(){
+  // 删除后无弹窗自动重扫（沿用上一次专项扫描的参数）
+  if(!lastSpec) return;
+  const ls=lastSpec;
+  try{
+    if(ls.kind==='wechat'){ const r=await api('/api/wechat/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+      if(r.ok){ $('specState').textContent='删除后自动重新扫描微信…'; specPoll(); } }
+    else{ const r=await api('/api/type/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:ls.kind,path:ls.path})});
+      if(r.ok){ $('specState').textContent='删除后自动重新扫描…'; specPoll(); } }
+  }catch(e){ toast('自动刷新失败','err'); }
+}
+function renderSpec(s){
+  if(s.kind==='wechat'){
+    const cats=(s.categories||[]).map(c=>`<tr><td style="font-weight:600">${esc(c.name)}</td><td>${fmtBytes(c.size)}</td><td>${c.count}</td><td style="width:130px">${c.name==='缓存'||c.name==='临时'?`<button class="btn danger small" onclick="wxCleanCache('${esc(c.name)}')">清理${esc(c.name)}</button>`:''}</td></tr>`).join('');
+    let html=`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span>微信数据总占用：<b>${fmtBytes(s.total)}</b>（${s.count} 个文件）</span><button class="btn small" onclick="openPath('${qp(s.root)}')">打开微信数据目录</button></div>`;
+    html+=`<div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>类别</th><th>占用</th><th>文件数</th><th style="width:130px">操作</th></tr></thead><tbody>${cats||'<tr><td colspan="4" style="color:var(--dim)">暂无</td></tr>'}</tbody></table></div>`;
+    const big=(s.items||[]).slice(0,50).map(f=>`<tr><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.path)}">${esc(f.path)}</td><td>${fmtBytes(f.size)}</td><td style="width:110px"><button class="btn small" onclick="openPath('${qp(f.path)}')">打开目录</button></td></tr>`).join('');
+    html+=`<h3 style="font-size:12.5px;color:var(--muted);margin:10px 0 6px">微信大文件（≥50MB，前 50 个）</h3><div class="tbl-wrap" style="max-height:260px"><table><thead><tr><th>文件</th><th>大小</th><th style="width:90px">操作</th></tr></thead><tbody>${big||'<tr><td colspan="3" style="color:var(--dim)">暂无</td></tr>'}</tbody></table></div>`;
+    $('specWechat').innerHTML=html;
+  }else{
+    const label={video:'视频',archive:'压缩包',installer:'安装包'}[s.ftype]||'文件';
+    const rows=(s.items||[]).map(f=>`<tr><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.path)}">${esc(f.path)}</td><td>${fmtBytes(f.size)}</td><td style="width:200px"><button class="btn small" onclick="openPath('${qp(f.path)}')">打开目录</button> <button class="btn danger small" onclick="delPath('${qp(f.path)}',false)">删除</button></td></tr>`).join('');
+    $('specResult').innerHTML=`<div style="margin-bottom:6px">共找到 <b>${s.count}</b> 个大${label}（合计 ${fmtBytes(s.total)}）</div><div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>文件</th><th>大小</th><th style="width:160px">操作</th></tr></thead><tbody>${rows||'<tr><td colspan="3" style="color:var(--dim)">未找到 ≥ 阈值的${label}文件</td></tr>'}</tbody></table></div>`;
+  }
+}
+async function wxCleanCache(cat){
+  const ok=await confirmAction('清理微信'+cat,`将清空微信<b>${cat}</b>目录中的文件（缓存可重建）。<br>运行中的微信可能占用部分文件（自动跳过），建议先退出微信再清理。<br>仅清理${cat}，<b>不影响聊天记录</b>。`,`确认清理`);
+  if(!ok) return;
+  try{ const r=await api('/api/wechat/clean',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat})});
+    if(r.ok) toast(`已清理微信${cat}，释放 ${fmtBytes(r.freed)}（${r.files} 个文件）`,'ok'); else toast(r.msg||'清理失败','err');
+    wechatScan();
+  }catch(e){ toast('清理失败','err'); }
+}
+
+async function delPath(path,isDir){
+  const name=path.split(/[\\\/]/).pop();
+  const ok=await confirmAction('删除到回收站',`将 <b>${esc(name)}</b> 移入回收站（可恢复）。<br>路径：${esc(path)}<br>⚠ 确认后才会执行。`,`移入回收站`);
+  if(!ok) return;
+  try{ const r=await api('/api/disk/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,is_dir:isDir})});
+    if(r.ok){ toast('已移入回收站：'+name,'ok'); pollScan(); _specRescan(); } else toast(r.msg||'删除失败','err');
+  }catch(e){ toast('删除失败','err'); }
+}
+
+/* ================= 显卡 ================= */
+function renderGpu(m){
+  const nv=m.gpu.find(x=>x.vendor==='NVIDIA'&&x.util!=null);
+  const g=nv||m.gpu[0]||{};
+  EC.gpuGauge.setOption({series:[{data:[{value:g.util!=null?g.util:0}]}]});
+  EC.gpuLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.gpu}]});
+  $('gpuGaugeTitle').textContent=g.name?g.name.slice(0,22):'GPU 占用';
+  let html=''; (m.gpu||[]).forEach(g=>{
+    const fv=(v,unit)=>v!=null?(typeof v==='number'?v.toFixed(v%1===0?0:1):v)+unit:'—';
+    const rows=[
+      ['占用率',g.util!=null?g.util.toFixed(0)+'%':'—'],['显存',g.mem_used!=null?g.mem_used.toFixed(0)+' / '+(g.mem_total/1024).toFixed(1)+' GB':(g.mem_total?g.mem_total+' GB':'—')],
+      ['显存占用率',g.mem_util!=null?g.mem_util.toFixed(0)+'%':'—'],['温度',g.temp!=null?g.temp.toFixed(0)+' ℃':'—'],
+      ['功耗',g.power!=null?g.power.toFixed(1)+' W':'—'],['功耗上限',g.power_limit!=null?g.power_limit.toFixed(0)+' W':'—'],
+      ['风扇',g.fan!=null?g.fan.toFixed(0)+'%':'—'],['核心频率',g.clock_graphics!=null?g.clock_graphics.toFixed(0)+' MHz':'—'],
+      ['显存频率',g.clock_mem!=null?g.clock_mem.toFixed(0)+' MHz':'—'],['视频编码',g.encoder!=null?g.encoder.toFixed(0)+'%':'—'],
+      ['驱动',g.driver||'—'],['厂商',g.vendor],
+    ];
+    html+=`<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:var(--card2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b>${esc(g.name)}</b><span class="pill cyan">${g.vendor} ${g.util!=null?'实时':''}</span></div>
+      <div class="grid g3">${rows.map(([k,v])=>`<div class="info-item"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div></div>`;
+  });
+  $('gpuCards').innerHTML=html||'<div class="empty">未检测到显卡</div>';
+}
+async function loadGpuApps(){ try{ const m=await api('/api/metrics');
+  $('gpuAppsTbody').innerHTML=(m.gpu_apps||[]).map(a=>`<tr><td>${a.pid}</td><td style="font-family:inherit">${esc(a.name)}</td><td>${a.mem!=null?a.mem+' MB':'—'}</td><td><button class="btn danger small" onclick="killProc(${a.pid},'${esc(a.name)}')">结束</button></td></tr>`).join('')||'<tr><td colspan="4" style="color:var(--dim)">当前无进程使用 GPU 计算</td></tr>';
+ }catch(e){} }
+
+/* ================= 网络 ================= */
+function renderNet(m){
+  $('netDown').textContent=fmtSpeed(m.io.net_down); $('netUp').textContent=fmtSpeed(m.io.net_up);
+  $('netTotalRecv').textContent=fmtBytes(m.io.net_total_recv); $('netTotalSent').textContent=fmtBytes(m.io.net_total_sent);
+  $('netGw').textContent=m.gateway||'--';
+  EC.netLine.setOption({xAxis:{data:HIST.t},series:[{data:HIST.down},{data:HIST.up}]});
+  let html=''; (m.net_if||[]).forEach(x=>{ html+=`<tr><td>${esc(x.name)}</td><td>${esc(x.ip)}</td><td>${esc(x.netmask||'--')}</td></tr>`; });
+  $('netIf').innerHTML=html||'<tr><td colspan="3" style="color:var(--dim)">未检测到网络接口</td></tr>';
+}
+async function runNetDiag(){
+  const el1=$('netDiagRes'), el2=$('opNetDiag');
+  el1.innerHTML=el2.innerHTML='<span style="color:var(--cyan)">正在 Ping…</span>';
+  try{
+    const r=await api('/api/network/diag',{method:'POST'});
+    let rows=r.results.map(x=>{
+      if(x.error) return `<div class="log-line"><span class="t">${x.name}</span>${esc(x.target)} — <span class="bad">失败</span></div>`;
+      const loss=x.loss==null?'?':x.loss;
+      const lossCls=loss===0?'ok':(loss>50?'bad':'');
+      return `<div class="log-line"><span class="t">${x.name}</span>${esc(x.target)} · 平均 <b>${x.avg_ms!=null?x.avg_ms+'ms':'--'}</b> · 最小 ${x.min_ms!=null?x.min_ms+'ms':'--'} · 最大 ${x.max_ms!=null?x.max_ms+'ms':'--'} · 丢包 <span class="${lossCls}">${loss}%</span></div>`;
+    }).join('');
+    const html=`<b>诊断时间 ${r.ts}</b> · 默认网关 <b>${r.gateway||'--'}</b><br>`+rows;
+    el1.innerHTML=html; el2.innerHTML=html; toast('网络诊断完成','ok');
+  }catch(e){ el1.innerHTML=el2.innerHTML='<span class="bad">诊断失败：'+esc(e.message)+'</span>'; }
+}
+let speedTesting=false;
+async function runSpeedTest(){
+  if(speedTesting) return; speedTesting=true;
+  $('netDiagRes').innerHTML='<span style="color:var(--cyan)">正在下载测速（20MB 真实数据）…</span>';
+  try{
+    const r=await api('/api/network/speedtest',{method:'POST'});
+    if(r.ok){ const html=`<b>测速完成</b>（${r.source}）<br>下载速度 <b>${r.mbps} Mbps</b> = ${r.mbs} MB/s<br>下载数据 ${fmtBytes(r.bytes)} · 用时 ${r.duration}s`;
+      $('netDiagRes').innerHTML=html; toast('测速完成：'+r.mbps+' Mbps','ok'); }
+    else $('netDiagRes').innerHTML='<span class="bad">测速失败：'+esc(r.msg)+'</span>';
+  }catch(e){ $('netDiagRes').innerHTML='<span class="bad">测速失败：'+esc(e.message)+'</span>'; }
+  finally{ speedTesting=false; }
+}
+async function netFix(action){
+  const labels={flushdns:'刷新 DNS 缓存',renew:'释放并重新获取 IP',winsock:'重置 Winsock',tcpip:'重置 TCP/IP 协议栈'};
+  const warns={flushdns:'仅清空系统 DNS 缓存，安全。',renew:'会短暂断开网络后重新获取 IP。',winsock:'重置 Winsock 目录，需管理员权限（会弹 UAC），重启后完全生效。',tcpip:'重置 TCP/IP 协议栈，需管理员权限（会弹 UAC），建议同时重启。'};
+  const ok=await confirmAction(labels[action],`确定执行 <b>${labels[action]}</b> 吗？<br>${warns[action]}<br>确认后才会执行。`,`执行修复`);
+  if(!ok) return;
+  try{ const r=await api('/api/network/fix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
+    const html=`<b>${labels[action]}</b><br><pre style="white-space:pre-wrap;font-size:11.5px;color:var(--muted)">${esc(r.output||r.msg||'完成')}</pre>`;
+    $('netFixRes').innerHTML=html;
+    const opFix=$('opNetFix'); if(opFix) opFix.innerHTML=html;
+    toast(labels[action]+' 已执行','ok');
+  }catch(e){ const em='<span class="bad">执行失败：'+esc(e.message)+'</span>'; $('netFixRes').innerHTML=em; const opFix=$('opNetFix'); if(opFix) opFix.innerHTML=em; }
+}
+
+/* ================= 性能诊断 ================= */
+let perfing=false;
+async function runPerfDiag(){
+  if(perfing) return; perfing=true;
+  $('opPerf').innerHTML='<span style="color:var(--cyan)">正在采集数据并评分…</span>';
+  try{
+    const r=await api('/api/perf/diagnose',{method:'POST'});
+    const cats=Object.entries(r.scores).map(([k,v])=>{const col=v>=85?'var(--green)':v>=60?'var(--amber)':'var(--red)'; return `<div class="stat-row"><span class="k">${k}</span><span class="v" style="color:${col}">${v} 分</span></div>`;}).join('');
+    const tips=r.tips.map(t=>`<li>${esc(t)}</li>`).join('');
+    const col=r.total>=85?'var(--green)':r.total>=60?'var(--amber)':'var(--red)';
+    const html=`<div class="score-ring"><div class="ring" id="perfRing"></div><div class="score-tips"><b>综合性能评分 ${r.total} 分</b><ul style="margin-top:8px">${tips}</ul><div style="margin-top:8px;color:var(--dim);font-size:11px">快照：CPU ${r.snapshot.cpu}% · 内存 ${r.snapshot.mem}% · 磁盘最高 ${r.snapshot.disk_worst}% · 进程 ${r.snapshot.proc_count} · ${r.ts}</div></div></div>`;
+    $('opPerf').innerHTML=html;
+    echarts.init($('perfRing')).setOption({series:[{type:'gauge',startAngle:210,endAngle:-30,min:0,max:100,radius:'100%',center:['50%','55%'],
+      progress:{show:true,width:10,itemStyle:{color:col}},axisLine:{lineStyle:{width:10,color:[[1,'#16233b']]}},
+      axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},pointer:{show:false},anchor:{show:false},title:{show:false},
+      detail:{valueAnimation:true,offsetCenter:[0,'15%'],fontSize:24,fontWeight:700,fontFamily:'Consolas',color:col,formatter:v=>v.toFixed(0)+' 分'},data:[{value:r.total}]}]});
+    toast('性能诊断完成：'+r.total+' 分','ok');
+  }catch(e){ $('opPerf').innerHTML='<span class="bad">诊断失败：'+esc(e.message)+'</span>'; }
+  finally{ perfing=false; }
+}
+
+/* ================= 进程页 ================= */
+let PROCS=[], procTimer=null;
+async function loadProcs(){ try{ $('procTbody').innerHTML='<tr><td colspan="6" style="color:var(--dim);text-align:center">加载中…</td></tr>';
+  PROCS=await api('/api/processes'); renderProcs(); }catch(e){ $('procTbody').innerHTML='<tr><td colspan="6" style="color:var(--dim)">加载失败</td></tr>'; } }
+function renderProcs(){ const q=$('procSearch').value.trim().toLowerCase();
+  const rows=PROCS.filter(p=>!q||p.name.toLowerCase().includes(q)||String(p.pid).includes(q));
+  $('procCount').textContent=PROCS.length;
+  $('procTbody').innerHTML=rows.map(x=>procRow(x)).join('')||'<tr><td colspan="6" style="color:var(--dim)">无结果</td></tr>';
+}
+
+/* ================= 启动项 ================= */
+let STARTUP=[];
+async function loadStartup(){ try{ $('startupTbody').innerHTML='<tr><td colspan="6" style="color:var(--dim);text-align:center">加载中…</td></tr>';
+  STARTUP=await api('/api/startup'); renderStartup(); }catch(e){} }
+function renderStartup(){ const q=$('startupSearch').value.trim().toLowerCase();
+  const rows=STARTUP.filter(x=>!q||x.name.toLowerCase().includes(q));
+  $('startupCount').textContent='共 '+STARTUP.length+' 项';
+  const heavy=STARTUP.filter(s=>s.enabled&&s.impact==='high');
+  const hb=$('startupHeavy'); if(hb){ hb.style.display=heavy.length?'':'none';
+    hb.innerHTML='<div style="padding:9px 12px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);border-radius:8px;font-size:12px;color:var(--amber);line-height:1.7">⚡ <b>开机加速建议</b>：以下 '+heavy.length+' 个启动项影响较大，可能拖慢开机，可在「启动应用设置」中禁用：'+heavy.slice(0,12).map(s=>`<b>${esc(s.name)}</b>`).join('、')+(heavy.length>12?'…':'')+'</div>'; }
+  $('startupTbody').innerHTML=rows.map(s=>{ const impCls=s.impact==='high'?'red':(s.impact==='mid'?'amber':'green');
+    const impTxt=s.impact==='high'?'高':(s.impact==='mid'?'中':'低');
+    return `<tr>
+    <td style="font-family:inherit;font-weight:600">${esc(s.name)}</td>
+    <td><span class="pill ${impCls}" title="按软件特征估算的影响等级，仅供参考">影响${impTxt}</span></td>
+    <td><span class="pill ${s.location==='HKCU'||s.location==='USER'?'green':'amber'}">${s.location}</span></td>
+    <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${esc(s.command||s.path||'')}">${esc((s.command||s.path||'').slice(0,70))}</td>
+    <td>${s.enabled?'<span class="pill green">已启用</span>':'<span class="pill amber">已禁用</span>'}</td>
+    <td>
+      <button class="btn small ${s.enabled?'':'primary'}" onclick="startupToggle('${esc(s.name)}','${s.type}','${s.location}','${s.enabled?'disable':'enable'}')">${s.enabled?'禁用':'启用'}</button>
+      <button class="btn danger small" onclick="startupToggle('${esc(s.name)}','${s.type}','${s.location}','delete')">删除</button>
+    </td></tr>`; }).join('')||'<tr><td colspan="6" style="color:var(--dim)">无启动项</td></tr>';
+}
+async function startupToggle(name,type,location,action){
+  const actLabel={disable:'禁用',enable:'启用',delete:'删除'}[action];
+  const warn=action==='delete'?'此操作将<b>永久移除</b>该启动项，不可恢复！':'禁用/启用为可逆操作（命令已备份）。';
+  const ok=await confirmAction(actLabel+'启动项',`确定要 ${actLabel} 启动项 <b>${esc(name)}</b> 吗？<br>${warn}`,actLabel);
+  if(!ok) return;
+  try{ const r=await api('/api/startup/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,location,action})});
+    if(r.ok){ toast(actLabel+'成功：'+name,'ok'); loadStartup(); } else toast(r.msg||'操作失败','err');
+  }catch(e){ toast('操作失败','err'); }
+}
+
+/* ================= 系统信息 ================= */
+async function loadSysinfo(){ try{
+  const s=await api('/api/sysinfo');
+  const items=[
+    ['主机名',s.hostname],['操作系统',s.os_caption],['系统版本','Build '+s.os_build],
+    ['CPU 型号',s.cpu_model],['逻辑 / 物理核心',s.cpu_logical+' / '+s.cpu_physical],
+    ['物理内存',fmtBytes(s.ram_total)],['主板',s.motherboard],['BIOS',s.bios],
+    ['开机时间',s.boot_time],['运行时长',fmtUptime(s.uptime_sec)],
+    ['电池',s.battery?(s.battery.percent+'%'+(s.battery.plugged?' · 充电中':' · 未接电源')):'无电池'],
+  ];
+  (s.disks||[]).forEach(d=>items.push(['物理磁盘',`${d.Name} · ${d.Size?fmtBytes(d.Size):'--'} · ${d.Health}`]));
+  $('sysGrid').innerHTML=items.map(([k,v])=>`<div class="info-item"><div class="k">${k}</div><div class="v">${esc(v??'--')}</div></div>`).join('');
+ }catch(e){ $('sysGrid').innerHTML='<div class="empty">系统信息读取失败</div>'; } }
+async function openSys(target){
+  try{ const r=await api('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target})});
+    if(r.ok) toast('已打开：'+r.label,'ok'); else toast(r.msg||'打开失败','err');
+  }catch(e){ toast('打开失败','err'); }
+}
+async function openPath(p){
+  try{ const r=await api('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})});
+    if(r.ok) toast('已打开所在目录','ok'); else toast(r.msg||'打开失败','err');
+  }catch(e){ toast('打开失败','err'); }
+}
+const PROTECTED_FILES=['pagefile.sys','hiberfil.sys','swapfile.sys','bootmgr','bootmgr.efi','ntldr','ntdetect.com','io.sys','msdos.sys'];
+function isProtected(p){
+  const n=(p||'').split(/[\\/]/).pop().toLowerCase();
+  if(PROTECTED_FILES.includes(n)) return true;
+  const l=(p||'').toLowerCase();
+  const sp=['c:\\windows\\system32','c:\\windows\\syswow64','c:\\windows\\fonts','c:\\windows\\winsxs','c:\\windows\\servicing','c:\\windows\\assembly'];
+  return sp.some(s=>l===s||l.startsWith(s+'\\'));
+}
+let SOFTWARE=[];
+async function loadSoftware(){ try{ SOFTWARE=await api('/api/software'); $('swCount').textContent=SOFTWARE.length; renderSoftware(); }catch(e){ $('swTbody').innerHTML='<tr><td colspan="3" style="color:var(--dim)">读取失败</td></tr>'; } }
+function renderSoftware(){ const q=$('swSearch').value.trim().toLowerCase();
+  const rows=SOFTWARE.filter(x=>!q||x.name.toLowerCase().includes(q)||(x.publisher||'').toLowerCase().includes(q));
+  $('swTbody').innerHTML=rows.map(s=>`<tr><td style="font-family:inherit;font-weight:600">${esc(s.name)}</td><td>${esc(s.version||'—')}</td><td style="font-family:inherit">${esc(s.publisher||'—')}</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--dim)">无结果</td></tr>';
+}
+
+/* ================= 内存清理 ================= */
+let cleaning=false;
+async function cleanMemory(){
+  if(cleaning) return; cleaning=true;
+  $('memCleanBtn').disabled=true;
+  $('memCleanRes').innerHTML='<div class="op-result"><span style="color:var(--cyan)">正在清理…</span></div>';
+  $('opMemClean').innerHTML='<span style="color:var(--cyan)">正在清理…</span>';
+  try{
+    const r=await api('/api/memory/clean',{method:'POST'});
+    const freeTxt=fmtBytes(r.freed_bytes);
+    let det='<br><b>主要释放明细（前10）：</b><br>';
+    det+=(r.details||[]).slice(0,10).map(d=>`· ${esc(d.name)} (PID ${d.pid})：释放 <span class="ok">${fmtBytes(d.freed)}</span>`).join('<br>');
+    if(!(r.details||[]).length) det+='· 本次各进程释放量均较小（<1MB）';
+    const html=`<b>清理完成</b> · 影响 ${r.processes} 个进程<br><span class="ok">可用内存 +${freeTxt}</span>（${fmtBytes(r.available_before)} → ${fmtBytes(r.available_after)}）${det}`;
+    $('memCleanRes').innerHTML=`<div class="op-result">${html}</div>`;
+    $('opMemClean').innerHTML=html;
+    toast('内存清理完成，释放 '+freeTxt,'ok');
+  }catch(e){ $('opMemClean').innerHTML='<span class="bad">清理失败：'+esc(e.message)+'</span>'; toast('内存清理失败','err'); }
+  finally{ cleaning=false; $('memCleanBtn').disabled=false; }
+}
+
+/* ================= 操作日志中心 ================= */
+async function loadOpLog(){
+  try{
+    const r=await api('/api/oplog');
+    const lst=r.list||[];
+    $('opLog').innerHTML=lst.length?('<b>共 '+lst.length+' 条操作记录</b><br>'+lst.map(o=>{
+      const t=new Date(o.ts*1000).toLocaleString('zh-CN',{hour12:false});
+      const size=o.size!=null?(' · '+fmtBytes(o.size)):'';
+      return `<div class="log-line"><span class="t">[${t}]</span><b style="color:${o.ok?'var(--green)':'var(--red)'}">${esc(o.action_name)}</b> · ${esc(o.target||'')}${size} <span style="color:var(--dim)">${esc(o.note||'')}</span></div>`;
+    }).join('')):'<span style="color:var(--dim)">暂无操作记录（删除/清理/修复操作会自动记录在此）</span>';
+  }catch(e){ $('opLog').innerHTML='<span style="color:var(--red)">读取失败</span>'; }
+}
+async function clearOpLog(){
+  const ok=await confirmAction('清空操作日志','确定清空全部操作日志吗？<br>仅清除本软件的日志记录，不影响系统。','清空日志');
+  if(!ok) return;
+  try{ const r=await api('/api/oplog/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); if(r.ok){ toast('日志已清空','ok'); loadOpLog(); } else toast(r.msg||'清空失败','err'); }catch(e){ toast('清空失败','err'); }
+}
+
+/* ================= 时钟 ================= */
+function clock(){ const d=new Date(); $('clock').textContent=d.toLocaleTimeString('zh-CN',{hour12:false});
+  $('dateStr').textContent=d.toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'}); }
+setInterval(clock,1000); clock();
+
+/* ================= 停止服务 ================= */
+let stopping=false;
+async function stopServer(){
+  const ok=await confirmAction('结束运行本系统','确定要停止本性能监测平台吗？<br>停止后数据将不再刷新，你可以关闭此页面。<br>如需再次使用，双击 <b>电脑管家启动.bat</b> 启动。','停止服务');
+  if(!ok) return;
+  try{ await api('/api/shutdown',{method:'POST'}); }catch(e){}
+  stopping=true;
+  document.body.innerHTML=`<div style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--txt);background:var(--bg)">
+    <div style="font-size:44px">⏻</div>
+    <h2 style="color:var(--green)">服务已停止</h2>
+    <p style="color:var(--muted)">性能监测平台已结束运行，现在可以安全关闭本页面。</p>
+    <p style="color:var(--dim);font-size:12px">再次使用：双击 pc-monitor-platform 目录下的 电脑管家启动.bat</p>
+  </div>`;
+}
+</script>
+</body>
+</html>
