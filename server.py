@@ -1027,6 +1027,82 @@ def _nic_errors():
         return {"errors": None, "discards": None}
 
 
+# ============ DNS 污染检测 ============
+POLLUTION_DOMAINS = [
+    ("github.com", "国外代码托管"),
+    ("google.com", "国外搜索"),
+    ("www.qq.com", "国内服务"),
+    ("www.baidu.com", "国内搜索"),
+    ("www.taobao.com", "国内电商"),
+]
+
+
+def _is_reserved_ip(ip):
+    """是否为保留/异常地址（这些地址作为合法网站解析结果即强疑似污染）"""
+    try:
+        parts = [int(x) for x in str(ip).split(".")]
+        if len(parts) != 4:
+            return True
+        a = parts[0]
+        if a == 0 or a == 10 or a == 127:
+            return True
+        if a == 169 and parts[1] == 254:
+            return True
+        if a == 192 and parts[1] == 168:
+            return True
+        if a == 172 and 16 <= parts[1] <= 31:
+            return True
+        if a == 100 and 64 <= parts[1] <= 127:
+            return True  # CGNAT 共享地址段
+        return False
+    except Exception:
+        return True
+
+
+def _doh_aliyun(domain):
+    """用阿里加密 DNS（DoH）查询域名真实解析结果"""
+    try:
+        url = "https://dns.alidns.com/resolve?name=%s&type=A" % domain
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/dns-json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            d = json.loads(r.read())
+        return [a["data"] for a in d.get("Answer", []) if a.get("type") == 1]
+    except Exception:
+        return []
+
+
+def dns_pollution_check():
+    """对比本机解析与公共加密 DNS（阿里 DoH）解析，识别疑似 DNS 污染"""
+    results = []
+    for domain, label in POLLUTION_DOMAINS:
+        try:
+            local = socket.gethostbyname(domain)
+        except Exception:
+            local = None
+        doh = _doh_aliyun(domain)
+        item = {"domain": domain, "label": label, "local": local, "doh": doh[:4]}
+        if local is None:
+            if doh:
+                item["level"] = "bad"
+                item["note"] = "本机无法解析该域名，但公共 DNS 可正常解析"
+            else:
+                item["level"] = "ok"
+                item["note"] = "本机与公共 DNS 均无法解析"
+        elif _is_reserved_ip(local):
+            item["level"] = "bad"
+            item["note"] = "本机解析到保留/异常地址 %s，强烈疑似被污染" % local
+        elif doh and local not in doh:
+            item["level"] = "warn"
+            item["note"] = "本机解析 %s 与公共 DNS 不同，可能为 CDN 地区差异，也可能疑似污染" % local
+        else:
+            item["level"] = "ok"
+            item["note"] = "本机与公共 DNS 解析一致，正常"
+        results.append(item)
+    return {"results": results,
+            "bad_count": len([r for r in results if r["level"] == "bad"]),
+            "warn_count": len([r for r in results if r["level"] == "warn"])}
+
+
 def network_health():
     """一键网络状态检测：综合诊断 + 详细卡顿原因 + 对应修复动作"""
     gateway = get_gateway()
@@ -1050,15 +1126,17 @@ def network_health():
         if gw.get("loss") == 100 or gw.get("avg_ms") is None:
             add("bad", "默认网关无响应",
                 "本机到路由器（%s）Ping 完全不通，局域网连接可能已中断。" % (gateway or "未知网关"),
-                [{"action": "renew", "label": "释放并重新获取 IP"}, {"action": "hint_router", "label": "查看重启路由器指引"}])
+                [{"action": "renew", "label": "释放并重新获取 IP", "level": "warm"},
+                 {"action": "hint_router", "label": "查看重启路由器指引", "level": "warm"}])
         elif gw.get("loss") and gw["loss"] > 10:
             add("bad", "局域网丢包严重",
                 "到路由器丢包 %s%%，WiFi 信号弱、网线松动或路由器不稳定，网页和视频会明显卡顿。" % gw["loss"],
-                [{"action": "hint_router", "label": "查看重启路由器指引"}, {"action": "hint_wifi", "label": "WiFi 优化建议"}])
+                [{"action": "hint_router", "label": "查看重启路由器指引", "level": "warm"},
+                 {"action": "hint_wifi", "label": "WiFi 优化建议", "level": "warm"}])
         elif gw.get("avg_ms") and gw["avg_ms"] > 100:
             add("warn", "路由器响应偏慢",
                 "到默认网关平均 %sms（正常应 <10ms），多为 WiFi 信号差或路由器负载过高。" % gw["avg_ms"],
-                [{"action": "hint_router", "label": "查看重启路由器指引"}])
+                [{"action": "hint_router", "label": "查看重启路由器指引", "level": "warm"}])
     # 2) DNS
     dns_items = [by_name[k] for k in ("阿里 DNS", "腾讯 DNS", "谷歌 DNS") if k in by_name]
     alive_dns = [r for r in dns_items if r.get("loss") is not None and r["loss"] < 100]
@@ -1067,52 +1145,77 @@ def network_health():
     if not alive_dns and dns_items:
         add("bad", "DNS 解析异常",
             "所有公共 DNS 均无法连通，可能导致网页打不开、域名解析失败（常见于 DNS 被劫持或网络策略限制）。",
-            [{"action": "flushdns", "label": "刷新 DNS 缓存"}, {"action": "hint_dns", "label": "查看更换 DNS 指引"}])
+            [{"action": "flushdns", "label": "刷新 DNS 缓存", "level": "warm"},
+             {"action": "hint_dns", "label": "查看更换 DNS 指引", "level": "warm"}])
     else:
         if dns_loss:
             add("warn", "DNS 丢包",
                 "%d/%d 个 DNS 服务器存在丢包，域名解析不稳定，打开网页会时快时慢。" % (len(dns_loss), len(dns_items)),
-                [{"action": "flushdns", "label": "刷新 DNS 缓存"}, {"action": "hint_dns", "label": "查看更换 DNS 指引"}])
+                [{"action": "flushdns", "label": "刷新 DNS 缓存", "level": "warm"},
+                 {"action": "hint_dns", "label": "查看更换 DNS 指引", "level": "warm"}])
         elif dns_slow:
             add("warn", "DNS 响应慢",
                 "DNS 服务器平均延迟最高 %sms（正常应 <50ms），域名解析变慢会让打开网页明显变卡。" % max(r["avg_ms"] for r in dns_slow),
-                [{"action": "flushdns", "label": "刷新 DNS 缓存"}, {"action": "hint_dns", "label": "查看更换 DNS 指引"}])
+                [{"action": "flushdns", "label": "刷新 DNS 缓存", "level": "warm"},
+                 {"action": "hint_dns", "label": "查看更换 DNS 指引", "level": "warm"}])
+    # 2.5) DNS 污染检测
+    poll = dns_pollution_check()
+    bad_poll = [r for r in poll["results"] if r["level"] == "bad"]
+    warn_poll = [r for r in poll["results"] if r["level"] == "warn"]
+    if bad_poll:
+        names = "、".join("%s(%s)" % (r["domain"], r["label"]) for r in bad_poll[:3])
+        add("bad", "疑似 DNS 污染",
+            "以下域名本机解析异常：%s。典型症状：部分网站打不开、被跳转到错误页面、证书报错、国外网站无法访问。%s" % (
+                names, bad_poll[0].get("note", "")),
+            [{"action": "flushdns", "label": "刷新 DNS 缓存", "level": "warm"},
+             {"action": "hint_dns", "label": "更换公共 DNS", "level": "warm"},
+             {"action": "hint_doh", "label": "开启 DoH 加密 DNS", "level": "warm"},
+             {"action": "hint_hosts", "label": "hosts 绑定修复", "level": "advanced"}])
+    elif warn_poll:
+        names = "、".join(r["domain"] for r in warn_poll[:3])
+        add("warn", "部分域名解析差异",
+            "%s 的本机解析与公共 DNS 不同，可能是 CDN 地区差异（属正常），也可能疑似污染，可进一步处理。" % names,
+            [{"action": "hint_dns", "label": "查看更换 DNS 指引", "level": "warm"},
+             {"action": "hint_doh", "label": "开启 DoH 加密 DNS", "level": "warm"}])
     # 3) 外网（百度）
     ext = by_name.get("百度首页")
     if ext:
         if ext.get("loss") == 100 or ext.get("avg_ms") is None:
             add("bad", "外网连接异常",
                 "无法连通百度等外网站点，可能是运营商线路故障、出口受限或 DNS 未解析到有效地址。",
-                [{"action": "renew", "label": "释放并重新获取 IP"}, {"action": "winsock", "label": "重置 Winsock"}, {"action": "tcpip", "label": "重置 TCP/IP"}])
+                [{"action": "renew", "label": "释放并重新获取 IP", "level": "warm"},
+                 {"action": "winsock", "label": "重置 Winsock", "level": "advanced"},
+                 {"action": "tcpip", "label": "重置 TCP/IP", "level": "advanced"}])
         elif ext.get("loss") and ext["loss"] > 5:
             add("warn", "外网丢包",
                 "访问外网丢包 %s%%，玩游戏、看视频会出现跳 PING 和卡顿。" % ext["loss"],
-                [{"action": "winsock", "label": "重置 Winsock"}, {"action": "tcpip", "label": "重置 TCP/IP"}])
+                [{"action": "winsock", "label": "重置 Winsock", "level": "advanced"},
+                 {"action": "tcpip", "label": "重置 TCP/IP", "level": "advanced"}])
         elif ext.get("avg_ms") and ext["avg_ms"] > 150:
             add("warn", "外网延迟偏高",
                 "访问外网平均 %sms，运营商出口线路延迟较大，对延迟敏感的操作会感到卡顿。" % ext["avg_ms"],
-                [{"action": "hint_isp", "label": "查看运营商相关建议"}])
+                [{"action": "hint_isp", "label": "查看运营商相关建议", "level": "warm"}])
     # 4) 带宽
     if down_mbps is not None:
         if down_mbps < 3:
             add("bad", "下载带宽严重不足",
                 "实测下载仅 %.1f Mbps，看视频、下载大文件都会很卡，可能被后台程序占满或宽带故障。" % down_mbps,
-                [{"action": "hint_bandwidth", "label": "查看带宽排查建议"}])
+                [{"action": "hint_bandwidth", "label": "查看带宽排查建议", "level": "warm"}])
         elif down_mbps < 10:
             add("warn", "下载带宽偏低",
                 "实测下载 %.1f Mbps，可能被后台下载/网盘占用，或宽带套餐本身带宽有限。" % down_mbps,
-                [{"action": "hint_bandwidth", "label": "查看带宽排查建议"}])
+                [{"action": "hint_bandwidth", "label": "查看带宽排查建议", "level": "warm"}])
     if up_mbps is not None:
         if up_mbps < 2:
             add("warn", "上传带宽偏低",
                 "实测上传仅 %.1f Mbps，视频通话、上传大文件会明显变慢。" % up_mbps,
-                [{"action": "hint_bandwidth", "label": "查看带宽排查建议"}])
+                [{"action": "hint_bandwidth", "label": "查看带宽排查建议", "level": "warm"}])
     # 5) 网卡错误包
     err_total = nic.get("errors") or 0
     if err_total and err_total > 50:
         add("warn", "网卡错误包过多",
             "网络适配器累计错误包 %s 个，可能存在网卡驱动异常或硬件接触问题。" % err_total,
-            [{"action": "hint_driver", "label": "查看网卡驱动建议"}])
+            [{"action": "hint_driver", "label": "查看网卡驱动建议", "level": "warm"}])
 
     # 综合判定
     bads = [r for r in reasons if r["level"] == "bad"]
@@ -1128,12 +1231,13 @@ def network_health():
     all_fixes = {}
     for r in reasons:
         for f in r["fixes"]:
-            all_fixes.setdefault(f["action"], f["label"])
+            all_fixes.setdefault(f["action"], {"label": f["label"], "level": f.get("level", "warm")})
     return {"status": status, "status_txt": status_txt, "score": score,
             "gateway": gateway, "ts": time.strftime("%H:%M:%S"),
             "reasons": reasons,
-            "fixes": [{"action": k, "label": v} for k, v in all_fixes.items()],
-            "speed": {"down_mbps": down_mbps, "up_mbps": up_mbps}}
+            "fixes": [{"action": k, "label": v["label"], "level": v["level"]} for k, v in all_fixes.items()],
+            "speed": {"down_mbps": down_mbps, "up_mbps": up_mbps},
+            "dns_pollution": poll}
 
 
 def network_fix(action):

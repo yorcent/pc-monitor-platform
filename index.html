@@ -1168,6 +1168,8 @@ const NET_HEALTH_HINTS={
   hint_router:'重启路由器指引：将路由器断电 30 秒后再通电，等待 1-2 分钟完全启动；若仍卡顿，尝试同时重启光猫。检查 WiFi 信号强度，尽量靠近路由器。',
   hint_wifi:'WiFi 优化建议：1) 优先连接 5GHz 频段，避开 2.4GHz 干扰；2) 靠近路由器减少墙体阻隔；3) 检查是否有其他设备大量占用 WiFi；4) 更新网卡驱动。',
   hint_dns:'更换 DNS 指引：设置 → 网络和 Internet → 更改适配器选项 → 双击当前网卡 → 属性 → Internet 协议版本 4 (TCP/IPv4) → 使用自定义 DNS，填 223.5.5.5（阿里）和 119.29.29.29（腾讯）。',
+  hint_doh:'开启 DoH 加密 DNS 指引（Windows 11）：设置 → 网络和 Internet → WLAN/以太网 → 当前网络右侧的 DNS 服务器分配 → 编辑 → 首选 DNS 填 223.5.5.5、备选 119.29.29.29，DNS 加密方式选择「仅未加密以外的加密选项」。Windows 10 系统建议直接改用公共 DNS（见「更换 DNS 指引」）。',
+  hint_hosts:'hosts 绑定修复指引：用记事本「以管理员身份」打开 C:/Windows/System32/drivers/etc/hosts，在末尾加一行「IP 域名」（例如：20.205.243.166 github.com），保存后再点一次「刷新 DNS 缓存」生效。适合对单个被污染域名做精准修复。',
   hint_isp:'运营商相关建议：若外网持续高延迟，可能是运营商出口线路问题，建议联系宽带运营商报障；也可尝试重启光猫后再检测。',
   hint_bandwidth:'带宽排查建议：1) 关闭后台正在下载/上传的程序（网盘、迅雷、Steam、Windows 更新）；2) 到「进程」页结束占用高的后台进程；3) 若多台设备共用宽带，检查其他设备占用；4) 仍慢可能是宽带套餐带宽有限或线路问题。',
   hint_driver:'网卡驱动建议：打开 设备管理器 → 网络适配器 → 右键当前网卡 → 更新驱动程序 → 自动搜索；或到主板/网卡厂商官网下载最新驱动。'
@@ -1190,7 +1192,12 @@ async function runNetHealth(elId='netHealthRes'){
         html+=`<div><b style="color:${c}">${icon} ${esc(rz.title)}</b></div>`;
         html+=`<div style="color:var(--muted);font-size:12px;margin:3px 0;line-height:1.5">${esc(rz.detail)}</div>`;
         if(rz.fixes&&rz.fixes.length){
-          html+='<div style="margin-top:5px">'+rz.fixes.map(f=>`<button class="btn small" onclick="netHealthFix('${f.action}')">${esc(f.label)}</button>`).join(' ')+'</div>';
+          html+='<div style="margin-top:5px">'+rz.fixes.map(f=>{
+            const adv=f.level==='advanced';
+            const style=adv?'border:1px solid var(--amber);color:var(--amber);':'';
+            const tag=adv?' <span style="font-size:10px;opacity:.85">⚠ 需重启</span>':'';
+            return `<button class="btn small" style="${style}" onclick="netHealthFix('${f.action}')">${esc(f.label)}${tag}</button>`;
+          }).join(' ')+'</div>';
         }
         html+='</div>';
       }
@@ -1206,7 +1213,7 @@ async function netHealthFix(action){
 }
 async function netFix(action){
   const labels={flushdns:'刷新 DNS 缓存',renew:'释放并重新获取 IP',winsock:'重置 Winsock',tcpip:'重置 TCP/IP 协议栈'};
-  const warns={flushdns:'仅清空系统 DNS 缓存，安全。',renew:'会短暂断开网络后重新获取 IP。',winsock:'重置 Winsock 目录，需管理员权限（会弹 UAC），重启后完全生效。',tcpip:'重置 TCP/IP 协议栈，需管理员权限（会弹 UAC），建议同时重启。'};
+  const warns={flushdns:'仅清空系统 DNS 缓存，安全。',renew:'会短暂断开网络后重新获取 IP。',winsock:'重置 Winsock 网络目录。不会删除任何文件或个人数据，仅把网络配置恢复为系统默认；需管理员权限（弹 UAC），并重启电脑后完全生效。',tcpip:'重置 TCP/IP 协议栈。不会删除任何文件或个人数据，仅把网络配置恢复为系统默认；需管理员权限（弹 UAC），并重启电脑后完全生效。'};
   const ok=await confirmAction(labels[action],`确定执行 <b>${labels[action]}</b> 吗？<br>${warns[action]}<br>确认后才会执行。`,`执行修复`);
   if(!ok) return;
   try{ const r=await api('/api/network/fix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
