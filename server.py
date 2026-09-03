@@ -948,15 +948,17 @@ def network_diag():
 
 
 def speed_test():
-    urls = [("Cloudflare", "https://speed.cloudflare.com/__down?bytes=20971520"),
-            ("中科大镜像", "https://mirrors.ustc.edu.cn/ubuntu/ls-lR.gz")]
+    # 测速源优先国内可达镜像（中科大/清华对脚本 UA 返回 403，已实测排除）
+    urls = [("华为云镜像", "https://mirrors.huaweicloud.com/ubuntu/ls-lR.gz"),
+            ("阿里云镜像", "https://mirrors.aliyun.com/ubuntu/ls-lR.gz"),
+            ("Cloudflare", "https://speed.cloudflare.com/__down?bytes=20971520")]
     last_err = "未知错误"
     for label, url in urls:
         try:
             start = time.time()
             total = 0
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=45) as r:
                 while True:
                     chunk = r.read(131072)
                     if not chunk:

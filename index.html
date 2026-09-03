@@ -520,9 +520,10 @@ a{color:var(--cyan)}
           <p>真实 Ping 网关/DNS/百度 判断连通性；真实下载测速；并提供 DNS 刷新、IP 重新获取、Winsock/TCP/IP 重置等一键修复（全部显式触发）。</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
             <button class="btn primary" onclick="runNetDiag()">开始诊断</button>
-            <button class="btn" onclick="runSpeedTest()">下载测速</button>
+            <button class="btn" onclick="runSpeedTest('opNetSpeed')">下载测速</button>
             <button class="btn ghost" onclick="switchTab('net')">前往网络页(接口/教程)</button>
           </div>
+          <div class="op-result" id="opNetSpeed" style="margin-bottom:10px"><span style="color:var(--dim)">点击「下载测速」开始真实测速…</span></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
             <button class="btn small" onclick="netFix('flushdns')">刷新DNS缓存</button>
             <button class="btn small" onclick="netFix('renew')">释放重取IP</button>
@@ -1136,16 +1137,20 @@ async function runNetDiag(){
   }catch(e){ el1.innerHTML=el2.innerHTML='<span class="bad">诊断失败：'+esc(e.message)+'</span>'; }
 }
 let speedTesting=false;
-async function runSpeedTest(){
+async function runSpeedTest(elId='netDiagRes'){
   if(speedTesting) return; speedTesting=true;
-  $('netDiagRes').innerHTML='<span style="color:var(--cyan)">正在下载测速（20MB 真实数据）…</span>';
+  const el=document.getElementById(elId);
+  if(!el){ speedTesting=false; return; }
+  el.innerHTML='<span style="color:var(--cyan)">正在下载测速（真实数据）…</span>';
+  const btn=document.querySelector('button[onclick^="runSpeedTest"]');
+  if(btn){ btn.disabled=true; btn.style.opacity=.5; }
   try{
     const r=await api('/api/network/speedtest',{method:'POST'});
     if(r.ok){ const html=`<b>测速完成</b>（${r.source}）<br>下载速度 <b>${r.mbps} Mbps</b> = ${r.mbs} MB/s<br>下载数据 ${fmtBytes(r.bytes)} · 用时 ${r.duration}s`;
-      $('netDiagRes').innerHTML=html; toast('测速完成：'+r.mbps+' Mbps','ok'); }
-    else $('netDiagRes').innerHTML='<span class="bad">测速失败：'+esc(r.msg)+'</span>';
-  }catch(e){ $('netDiagRes').innerHTML='<span class="bad">测速失败：'+esc(e.message)+'</span>'; }
-  finally{ speedTesting=false; }
+      el.innerHTML=html; toast('测速完成：'+r.mbps+' Mbps','ok'); }
+    else el.innerHTML='<span class="bad">测速失败：'+esc(r.msg)+'</span>';
+  }catch(e){ el.innerHTML='<span class="bad">测速失败：'+esc(e.message)+'</span>'; }
+  finally{ speedTesting=false; if(btn){ btn.disabled=false; btn.style.opacity=1; } }
 }
 async function netFix(action){
   const labels={flushdns:'刷新 DNS 缓存',renew:'释放并重新获取 IP',winsock:'重置 Winsock',tcpip:'重置 TCP/IP 协议栈'};
